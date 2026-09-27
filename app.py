@@ -1,6 +1,6 @@
 import os
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 from docx import Document
 
 # --- PAGE CONFIGURATION ---
@@ -48,7 +48,8 @@ if check_password():
         st.info("💡 Please provide a Gemini API Key to proceed.")
         st.stop()
 
-    genai.configure(api_key=api_key)
+    # Initialize Gemini Client
+    client = genai.Client(api_key=api_key)
 
     # Form inputs
     col1, col2 = st.columns(2)
@@ -66,9 +67,6 @@ if check_password():
     if st.button("Generate Lesson Plan", type="primary"):
         with st.spinner("Generating DepEd ILAW Lesson Plan..."):
             try:
-                # Use gemini-2.5-flash or gemini-1.5-flash without sub-version suffixes
-                model = genai.GenerativeModel('gemini-1.5-pro')
-                
                 prompt = f"""
                 You are an expert DepEd Public School Master Teacher in the Philippines.
                 Create a detailed DepEd Daily Lesson Log (DLL) / Lesson Plan in the ILAW format for:
@@ -87,7 +85,11 @@ if check_password():
                 V. REMARKS & REFLECTION
                 """
 
-                response = model.generate_content(prompt)
+                # Call model using modern SDK
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=prompt
+                )
                 generated_text = response.text
 
                 st.markdown("### Generated Lesson Plan")
