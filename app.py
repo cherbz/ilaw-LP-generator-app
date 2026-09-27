@@ -115,7 +115,6 @@ if check_password():
         
         st.markdown("**Active COT Indicators for Generation:**")
         
-        # Dynamically render checkboxes based on chosen rank
         selected_cot_indicators = []
         available_indicators = COT_INDICATORS_BY_RANK[teacher_rank]
         
@@ -133,7 +132,8 @@ if check_password():
 
     client = genai.Client(api_key=api_key)
 
-    # Input Fields Layout
+    # General Information
+    st.subheader("📋 General Information")
     col1, col2 = st.columns(2)
     with col1:
         teacher_name = st.text_input("Teacher Name:", "NORBERTO P. BINONDO JR.")
@@ -143,7 +143,34 @@ if check_password():
     with col2:
         lesson_name = st.text_input("Name of Lesson:", "Graphing Linear Functions")
         sessions = st.number_input("No. of Sessions:", min_value=1, max_value=10, value=1)
-        uploaded_pptx = st.file_uploader("Upload Lesson Presentation (.pptx)", type=["pptx"])
+
+    st.divider()
+
+    # Competency Input Tabs
+    st.subheader("🎯 DepEd Curriculum & Lesson Inputs")
+    tab1, tab2 = st.tabs(["📝 Manual Input / Copy-Paste Competencies", "📚 Suggested Template Prompts"])
+
+    with tab1:
+        learning_competency = st.text_area(
+            "Enter / Copy-Paste DepEd Learning Competency:",
+            value="Graphs a linear function and values its real-life applications (domain, range, intercepts, and slope).",
+            height=100
+        )
+        specific_objectives = st.text_area(
+            "Enter Specific Objectives or Focus Points (Optional):",
+            value="1. Graph linear equations using table of values.\n2. Interpret slope and y-intercept in real-life contexts.\n3. Participate actively in group activities.",
+            height=120
+        )
+
+    with tab2:
+        st.info("💡 You can select or reference pre-formulated DepEd competencies for faster lesson plan generation.")
+        st.markdown("""
+        **Example Mathematics Competency:**
+        > *Graphs a linear function and values its real-life applications (domain, range, intercepts, and slope).*
+
+        **Example TLE / Computer Systems Servicing Competency:**
+        > *Install and configure computer systems and networks in accordance with industry standards.*
+        """)
 
     st.divider()
 
@@ -163,13 +190,19 @@ if check_password():
                 - No. of Sessions: {sessions}
                 - Teacher Rank: {teacher_rank}
 
+                DEPED LEARNING COMPETENCY:
+                {learning_competency}
+
+                SPECIFIC OBJECTIVES / FOCUS POINTS:
+                {specific_objectives}
+
                 TARGET COT INDICATORS TO EMBED IN TEXT (Include '📌 [COT INDICATOR: ...]' tags explicitly at the end of relevant sections):
                 {chr(10).join(['- ' + c for c in selected_cot_indicators])}
 
                 PROVIDE OUTPUT EXACTLY IN THIS JSON FORMAT (no additional markdown outside JSON):
                 {{
-                  "references": "DepEd Curriculum Guide & Presentation Slides",
-                  "competency": "Graphs a linear function and values its real-life applications (domain, range, intercepts, and slope).",
+                  "references": "DepEd Curriculum Guide & Teacher's Guide",
+                  "competency": "{learning_competency}",
                   "objectives": "1. Graph linear equations by constructing a table of values and plotting points on the Cartesian plane.\\n2. Interpret the slope and y-intercept within real-life contexts.\\n3. Show cooperative engagement during group activities.",
                   "learner_context": "Differentiated Experiences...",
                   "pre_lesson": "Conduct diagnostic review...",
