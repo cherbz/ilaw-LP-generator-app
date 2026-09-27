@@ -39,7 +39,6 @@ if check_password():
     st.write("Generate DepEd-aligned Daily Lesson Logs and Lesson Plans instantly.")
 
     # Configure Gemini API Key
-    # Checks Streamlit Secrets first (for cloud deployment), then falls back to environment variable
     api_key = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY"))
     
     if not api_key:
@@ -60,14 +59,15 @@ if check_password():
 
     with col2:
         quarter = st.selectbox("Quarter", ["Quarter 1", "Quarter 2", "Quarter 3", "Quarter 4"])
-        duration = st.text_input("Duration", "60 minutes")
+        duration = st.text_input("Duration", "45 minutes")
         learning_competency = st.text_area("Learning Competency", "Solves problems involving quadrilaterals.")
 
     # Generation Button
     if st.button("Generate Lesson Plan", type="primary"):
         with st.spinner("Generating DepEd ILAW Lesson Plan..."):
             try:
-                model = genai.GenerativeModel('gemini-1.5-flash-latest')
+                # Use gemini-2.5-flash or gemini-1.5-flash without sub-version suffixes
+                model = genai.GenerativeModel('gemini-1.5-pro')
                 
                 prompt = f"""
                 You are an expert DepEd Public School Master Teacher in the Philippines.
