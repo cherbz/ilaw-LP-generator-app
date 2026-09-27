@@ -67,7 +67,7 @@ if check_password():
     if st.button("Generate Lesson Plan", type="primary"):
         with st.spinner("Generating DepEd ILAW Lesson Plan..."):
             try:
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                model = genai.GenerativeModel('gemini-1.5-flash-latest')
                 
                 prompt = f"""
                 You are an expert DepEd Public School Master Teacher in the Philippines.
