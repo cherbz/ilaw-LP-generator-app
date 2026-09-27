@@ -1,8 +1,9 @@
 import os
+import json
 import streamlit as st
 from google import genai
 from docx import Document
-from docx.shared import Pt, Inches, RGBColor
+from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -69,6 +70,34 @@ def check_password():
 
 # --- MAIN APPLICATION CODE ---
 if check_password():
+    # --- COT INDICATORS DICTIONARY BY TEACHER RANK ---
+    COT_INDICATORS_BY_RANK = {
+        "Teacher I - III (Proficient)": [
+            "1.4.2: Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills.",
+            "1.5.2: Apply a range of teaching strategies to develop critical and creative thinking, as well as other higher-order thinking skills.",
+            "2.3.2: Manage classroom structure to engage learners in meaningful exploration, discovery and hands-on activities.",
+            "3.1.2: Use differentiated, developmentally appropriate learning experiences to address learners' gender, needs, strengths, interests and experiences."
+        ],
+        "Teacher IV - VI (Highly Proficient)": [
+            "1.4.3: Model and support colleagues in using a range of teaching strategies that enhance learner achievement in literacy and numeracy skills.",
+            "1.5.3: Develop and apply effective teaching strategies to promote critical and creative thinking, as well as other higher-order thinking skills.",
+            "2.3.3: Work with colleagues to share differentiated, developmentally appropriate opportunities to address learners' needs.",
+            "3.1.3: Design, adapt and implement teaching strategies that are responsive to learners with disabilities, giftedness and talents."
+        ],
+        "Master Teacher I - II (Highly Proficient)": [
+            "1.4.3: Lead colleagues in evaluating and refining teaching strategies that enhance learner achievement in literacy and numeracy skills.",
+            "1.5.3: Model exemplary teaching strategies to develop higher-order thinking skills among learners.",
+            "2.3.3: Support colleagues in managing structured classroom environments for discovery learning.",
+            "3.1.3: Advise and guide colleagues on differentiated instruction techniques tailored to diverse learner groups."
+        ],
+        "Master Teacher III - V (Distinguished)": [
+            "1.4.4: Lead institutional initiatives that improve literacy and numeracy achievement across grade levels.",
+            "1.5.4: Lead in the design and evaluation of instructional models that foster critical, creative, and transformative thinking.",
+            "2.3.4: Establish school-wide standards for conducive and structured physical and virtual learning environments.",
+            "3.1.4: Provide strategic leadership in creating inclusive and responsive learning policies and frameworks."
+        ]
+    }
+
     # --- SIDEBAR CONFIGURATION ---
     with st.sidebar:
         st.header("🔍 Configuration")
@@ -78,21 +107,21 @@ if check_password():
         
         st.divider()
         st.header("📌 Target COT Indicators")
+        
         teacher_rank = st.selectbox(
             "Select Your Teacher Rank:",
-            [
-                "Teacher I - III (Proficient)",
-                "Teacher IV - VI (Highly Proficient)",
-                "Master Teacher I - II (Highly Proficient)",
-                "Master Teacher III - V (Distinguished)"
-            ]
+            list(COT_INDICATORS_BY_RANK.keys())
         )
         
         st.markdown("**Active COT Indicators for Generation:**")
-        cot_1 = st.checkbox("1.4.2: Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills.", value=True)
-        cot_2 = st.checkbox("1.5.2: Apply a range of teaching strategies to develop critical and creative thinking, as well as other higher-order thinking skills.", value=True)
-        cot_3 = st.checkbox("2.3.2: Manage classroom structure to engage learners in meaningful exploration, discovery and hands-on activities.", value=True)
-        cot_4 = st.checkbox("3.1.2: Use differentiated, developmentally appropriate learning experiences to address learners' gender, needs, strengths, interests and experiences.", value=True)
+        
+        # Dynamically render checkboxes based on chosen rank
+        selected_cot_indicators = []
+        available_indicators = COT_INDICATORS_BY_RANK[teacher_rank]
+        
+        for idx, indicator in enumerate(available_indicators):
+            if st.checkbox(indicator, value=True, key=f"cot_{teacher_rank}_{idx}"):
+                selected_cot_indicators.append(indicator)
 
     # --- MAIN UI LAYOUT ---
     st.title("📝 Binonz ILAW Lesson Plan Generator")
@@ -122,12 +151,6 @@ if check_password():
     if st.button("🪄 Generate ILAW Lesson Plan Document", type="primary", use_container_width=True):
         with st.spinner("Generating DepEd Order No. 003, s. 2026 Annex A Lesson Plan..."):
             try:
-                cot_list = []
-                if cot_1: cot_list.append("1.4.2: Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills.")
-                if cot_2: cot_list.append("1.5.2: Apply a range of teaching strategies to develop critical and creative thinking, as well as other higher-order thinking skills.")
-                if cot_3: cot_list.append("2.3.2: Manage classroom structure to engage learners in meaningful exploration, discovery and hands-on activities.")
-                if cot_4: cot_list.append("3.1.2: Use differentiated, developmentally appropriate learning experiences to address learners' gender, needs, strengths, interests and experiences.")
-
                 prompt = f"""
                 You are a DepEd Master Teacher in the Philippines.
                 Generate a complete DepEd Order No. 003, s. 2026 (Annex A Template) Lesson Plan.
@@ -141,20 +164,20 @@ if check_password():
                 - Teacher Rank: {teacher_rank}
 
                 TARGET COT INDICATORS TO EMBED IN TEXT (Include '📌 [COT INDICATOR: ...]' tags explicitly at the end of relevant sections):
-                {chr(10).join(['- ' + c for c in cot_list])}
+                {chr(10).join(['- ' + c for c in selected_cot_indicators])}
 
                 PROVIDE OUTPUT EXACTLY IN THIS JSON FORMAT (no additional markdown outside JSON):
                 {{
                   "references": "DepEd Curriculum Guide & Presentation Slides",
                   "competency": "Graphs a linear function and values its real-life applications (domain, range, intercepts, and slope).",
-                  "objectives": "1. Graph linear equations by constructing a table of values and plotting points on the Cartesian plane.\\n2. Interpret the slope and y-intercept within real-life contexts.\\n3. Show cooperative engagement during group activities. 📌 [COT INDICATOR: 1.4.2: Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills.]",
-                  "learner_context": "Differentiated Experiences... 📌 [COT INDICATOR: 3.1.2: Use differentiated, developmentally appropriate learning experiences to address learners' gender, needs, strengths, interests and experiences.]",
-                  "pre_lesson": "Conduct diagnostic review... 📌 [COT INDICATOR: 1.4.2: Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills.]",
-                  "instructional_flow": "Explain step-by-step substitution... 📌 [COT INDICATOR: 1.1.2: Apply knowledge of content within and across curriculum teaching areas.]",
-                  "group_activity": "Assign group tasks with varied complexities... 📌 [COT INDICATOR: 2.3.2: Manage classroom structure to engage learners in meaningful exploration, discovery and hands-on activities.]",
-                  "synthesis": "Facilitate structured debrief... 📌 [COT INDICATOR: 1.5.2: Apply a range of teaching strategies to develop critical and creative thinking, as well as other higher-order thinking skills.]",
-                  "integration": "Incorporate cross-curricular linkages... 📌 [COT INDICATOR: 1.1.2: Apply knowledge of content within and across curriculum teaching areas.]",
-                  "assessment": "Formative evaluation on paper... 📌 [COT INDICATOR: 4.1.2: Design, select, organize, and use diagnostic, formative, and summative assessment strategies.]",
+                  "objectives": "1. Graph linear equations by constructing a table of values and plotting points on the Cartesian plane.\\n2. Interpret the slope and y-intercept within real-life contexts.\\n3. Show cooperative engagement during group activities.",
+                  "learner_context": "Differentiated Experiences...",
+                  "pre_lesson": "Conduct diagnostic review...",
+                  "instructional_flow": "Explain step-by-step substitution...",
+                  "group_activity": "Assign group tasks with varied complexities...",
+                  "synthesis": "Facilitate structured debrief...",
+                  "integration": "Incorporate cross-curricular linkages...",
+                  "assessment": "Formative evaluation on paper...",
                   "extended_learning": "Assign infant growth challenge...",
                   "teacher_reflections": "Reflect on student mastery..."
                 }}
@@ -165,8 +188,6 @@ if check_password():
                     contents=prompt
                 )
                 
-                # Parse JSON Response
-                import json
                 clean_json = response.text.replace("```json", "").replace("```", "").strip()
                 data = json.loads(clean_json)
 
