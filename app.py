@@ -4,7 +4,7 @@ import re
 import streamlit as st
 from google import genai
 from docx import Document
-from docx.shared import Pt, Inches, RGBColor
+from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.text import WD_COLOR_INDEX
 from docx.oxml import OxmlElement
@@ -80,8 +80,9 @@ def add_styled_row(table, title, content):
     cell_title = row.cells[0]
     cell_content = row.cells[1]
     
-    cell_title.width = Inches(2.2)
-    cell_content.width = Inches(4.3)
+    # Adjusted column widths to fit 6.5 inch printable width (8.5 - 1 left - 1 right)
+    cell_title.width = Inches(2.0)
+    cell_content.width = Inches(4.5)
     
     set_cell_background(cell_title, "F4F6F8")
     set_cell_margins(cell_title, top=100, bottom=100, left=150, right=150)
@@ -278,6 +279,13 @@ if check_password():
                 # --- GENERATE WORD (.DOCX) MATCHING TEMPLATE EXACTLY ---
                 doc = Document()
 
+                # SET DOCUMENT PAGE MARGINS (1 inch on all sides)
+                section = doc.sections[0]
+                section.top_margin = Inches(1.0)
+                section.bottom_margin = Inches(1.0)
+                section.left_margin = Inches(1.0)
+                section.right_margin = Inches(1.0)
+
                 # Document Header Title
                 p_head = doc.add_paragraph()
                 p_head.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -332,13 +340,13 @@ if check_password():
 
                 # UI Preview
                 st.subheader("📄 Generated Lesson Plan Preview")
-                st.info("The generated Word document contains yellow text highlights for embedded COT indicators matching Annex A requirements.")
+                st.info("The generated Word document page margins are set to 1 inch (left, right, top, bottom) with highlighted COT indicators.")
                 st.markdown(f"**Lesson:** {lesson_name} | **Teacher:** {teacher_name}")
                 st.markdown(f"**Competency:** {data['competency']}")
 
                 with open(doc_path, "rb") as file:
                     st.download_button(
-                        label="📥 Download Highlighted Annex A Word Document (.docx)",
+                        label="📥 Download 1-Inch Margin Annex A Word Document (.docx)",
                         data=file,
                         file_name=f"ILAW_Lesson_Plan_{lesson_name.replace(' ', '_')}.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
