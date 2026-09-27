@@ -1,10 +1,12 @@
 import os
 import json
+import re
 import streamlit as st
 from google import genai
 from docx import Document
-from docx.shared import Pt, Inches
+from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_COLOR_INDEX
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
@@ -15,7 +17,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- HELPER FUNCTIONS FOR DOCX TABLE FORMATTING ---
+# --- HELPER FUNCTIONS FOR XML TABLE & CELL FORMATTING ---
 def set_cell_background(cell, fill_hex):
     tcPr = cell._element.get_or_add_tcPr()
     shd = OxmlElement('w:shd')
@@ -24,15 +26,66 @@ def set_cell_background(cell, fill_hex):
     shd.set(qn('w:fill'), fill_hex)
     tcPr.append(shd)
 
+def set_cell_margins(cell, top=100, bottom=100, left=150, right=150):
+    tcPr = cell._element.get_or_add_tcPr()
+    tcMar = OxmlElement('w:tcMar')
+    for m, val in [('top', top), ('bottom', bottom), ('left', left), ('right', right)]:
+        node = OxmlElement(f'w:{m}')
+        node.set(qn('w:w'), str(val))
+        node.set(qn('w:type'), 'dxa')
+        tcMar.append(node)
+    tcPr.append(tcMar)
+
+def add_formatted_text_with_highlights(paragraph, text):
+    """
+    Parses text for '📌 [COT INDICATOR: ...]' patterns and renders them 
+    with Yellow Highlighting and Bold styling matching the target DOCX.
+    """
+    pattern = r'(📌\s*\[COT INDICATOR:[^\]]+\])'
+    parts = re.split(pattern, text)
+    
+    for part in parts:
+        if not part:
+            continue
+        if part.startswith('📌') or 'COT INDICATOR:' in part:
+            run = paragraph.add_run(f" {part.strip()} ")
+            run.font.name = 'Calibri'
+            run.font.size = Pt(9.5)
+            run.font.bold = True
+            run.font.highlight_color = WD_COLOR_INDEX.YELLOW
+        else:
+            run = paragraph.add_run(part)
+            run.font.name = 'Calibri'
+            run.font.size = Pt(10)
+
+def add_table_header_section(table, title):
+    """Adds a full-width header row for main sections like 1. INTENTIONS."""
+    row = table.add_row()
+    a = row.cells[0]
+    b = row.cells[1]
+    a.merge(b)
+    
+    set_cell_background(a, "E0E0E0")
+    set_cell_margins(a, top=120, bottom=120, left=150, right=150)
+    
+    p = a.paragraphs[0]
+    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    run = p.add_run(title)
+    run.bold = True
+    run.font.name = 'Calibri'
+    run.font.size = Pt(10.5)
+
 def add_styled_row(table, title, content):
     row = table.add_row()
     cell_title = row.cells[0]
     cell_content = row.cells[1]
     
-    cell_title.width = Inches(2.0)
-    cell_content.width = Inches(4.5)
+    cell_title.width = Inches(2.2)
+    cell_content.width = Inches(4.3)
     
-    set_cell_background(cell_title, "F0F2F6")
+    set_cell_background(cell_title, "F4F6F8")
+    set_cell_margins(cell_title, top=100, bottom=100, left=150, right=150)
+    set_cell_margins(cell_content, top=100, bottom=100, left=150, right=150)
     
     p_title = cell_title.paragraphs[0]
     run_title = p_title.add_run(title)
@@ -41,9 +94,7 @@ def add_styled_row(table, title, content):
     run_title.font.size = Pt(10)
     
     p_content = cell_content.paragraphs[0]
-    run_content = p_content.add_run(content)
-    run_content.font.name = 'Calibri'
-    run_content.font.size = Pt(10)
+    add_formatted_text_with_highlights(p_content, content)
 
 # --- PASSWORD PROTECTION FUNCTION ---
 def check_password():
@@ -124,7 +175,7 @@ if check_password():
 
     # --- MAIN UI LAYOUT ---
     st.title("📝 Binonz ILAW Lesson Plan Generator")
-    st.caption("Automated DepEd Order No. 003, s. 2026 Lesson Plan Generator with Embedded COT Indicators")
+    st.caption("Automated DepEd Order No. 003, s. 2026 Lesson Plan Generator with Highlighted Embedded COT Indicators")
 
     if not api_key:
         st.warning("⚠️ Please provide a Gemini API Key in the sidebar to generate lesson plans.")
@@ -132,7 +183,7 @@ if check_password():
 
     client = genai.Client(api_key=api_key)
 
-    # General Information
+    # General Information Inputs
     st.subheader("📋 General Information")
     col1, col2 = st.columns(2)
     with col1:
@@ -158,7 +209,7 @@ if check_password():
         )
         specific_objectives = st.text_area(
             "Enter Specific Objectives or Focus Points (Optional):",
-            value="1. Graph linear equations using table of values.\n2. Interpret slope and y-intercept in real-life contexts.\n3. Participate actively in group activities.",
+            value="1. Graph linear equations by constructing a table of values and plotting points on the Cartesian plane.\n2. Interpret the slope and y-intercept within real-life contexts.\n3. Show cooperative engagement during differentiated group activities.",
             height=120
         )
 
@@ -176,7 +227,7 @@ if check_password():
 
     # --- GENERATION LOGIC ---
     if st.button("🪄 Generate ILAW Lesson Plan Document", type="primary", use_container_width=True):
-        with st.spinner("Generating DepEd Order No. 003, s. 2026 Annex A Lesson Plan..."):
+        with st.spinner("Generating DepEd Order No. 003, s. 2026 Annex A Lesson Plan with Highlighting..."):
             try:
                 prompt = f"""
                 You are a DepEd Master Teacher in the Philippines.
@@ -201,18 +252,18 @@ if check_password():
 
                 PROVIDE OUTPUT EXACTLY IN THIS JSON FORMAT (no additional markdown outside JSON):
                 {{
-                  "references": "DepEd Curriculum Guide & Teacher's Guide",
+                  "references": "DepEd K to 12 Curriculum Guide; Mathematics 9 Teacher's Guide; Learner's Materials for Grade 9 Mathematics",
                   "competency": "{learning_competency}",
-                  "objectives": "1. Graph linear equations by constructing a table of values and plotting points on the Cartesian plane.\\n2. Interpret the slope and y-intercept within real-life contexts.\\n3. Show cooperative engagement during group activities.",
-                  "learner_context": "Differentiated Experiences...",
-                  "pre_lesson": "Conduct diagnostic review...",
-                  "instructional_flow": "Explain step-by-step substitution...",
-                  "group_activity": "Assign group tasks with varied complexities...",
-                  "synthesis": "Facilitate structured debrief...",
-                  "integration": "Incorporate cross-curricular linkages...",
-                  "assessment": "Formative evaluation on paper...",
-                  "extended_learning": "Assign infant growth challenge...",
-                  "teacher_reflections": "Reflect on student mastery..."
+                  "objectives": "1. Graph linear equations by constructing a table of values and plotting points on the Cartesian plane.\\n2. Interpret the slope and y-intercept within real-life contexts, such as airline baggage fees and infant weight monitoring.\\n3. Show cooperative engagement during differentiated group activities to complete mathematical challenges. 📌 [COT INDICATOR: 1.4.2: Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills.]",
+                  "learner_context": "The {grade_section} class is a mixed-ability group of learners with varied mathematical inclinations. Visual and kinesthetic learners benefit from coordinate plotting exercises, while logical-mathematical thinkers appreciate contextual applications. Differentiated experiences help bridge the achievement gap. 📌 [COT INDICATOR: 3.1.2: Use differentiated, developmentally appropriate learning experiences to address learners' gender, needs, strengths, interests and experiences.]",
+                  "pre_lesson": "Conduct a brief 'Coordinate Hunt' diagnostic game to test plotting concepts. Establish non-verbal signals and positive feedback systems to ensure a safe, organized environment. Review key numeracy concepts before introducing linear frameworks. 📌 [COT INDICATOR: 1.4.2: Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills.]",
+                  "instructional_flow": "Explain how to graph the linear equation y = 3x - 4 and y = -0.5x - 2. Use color-coded ICT-assisted plotting animations to illustrate step-by-step substitution of values. Highlight cross-curricular science and health integration. 📌 [COT INDICATOR: 1.5.2: Apply a range of teaching strategies to develop critical and creative thinking, as well as other higher-order thinking skills.]",
+                  "group_activity": "Assign group tasks with varied complexities: Group 1 and 3 use basic integers; Group 2 (Airline luggage fee) and Group 4 (Infant weight tracking) apply equations to real-life issues. Walk around to moderate discussions and manage cooperative structures. 📌 [COT INDICATOR: 2.3.2: Manage classroom structure to engage learners in meaningful exploration, discovery and hands-on activities.]",
+                  "synthesis": "Facilitate a structured debrief centered on three essential questions regarding the steps in graphing linear functions and real-life mathematical models. 📌 [COT INDICATOR: 1.5.2: Apply a range of teaching strategies to develop critical and creative thinking, as well as other higher-order thinking skills.]",
+                  "integration": "Incorporate cross-curricular linkages with Health/Pediatrics (monitoring growth) and Business/Economics (calculating baggage fee rates) to demonstrate practical uses of math.",
+                  "assessment": "Conduct a formative 'Graph Checkpoint' evaluation on paper. Students are given an equation to find coordinates, construct a table of values, and trace the line.",
+                  "extended_learning": "Assign the 'Infant Growth Challenge': Solve y = 0.9x + 3 for x = 0, 3, 6, and 12. Plot coordinates on graph paper and identify the y-intercept.",
+                  "teacher_reflections": "Reflect on student responses to decimal coefficients and note the effectiveness of peer coaching during group work."
                 }}
                 """
 
@@ -224,29 +275,23 @@ if check_password():
                 clean_json = response.text.replace("```json", "").replace("```", "").strip()
                 data = json.loads(clean_json)
 
-                # --- DISPLAY PREVIEW ---
-                st.subheader("📄 Generated Lesson Plan Preview")
-                st.markdown(f"**Lesson:** {lesson_name} | **Teacher:** {teacher_name}")
-                st.markdown(f"**Competency:** {data['competency']}")
-                st.markdown("---")
-                st.markdown(f"**Objectives:**\n{data['objectives']}")
-                st.markdown(f"**Instructional Flow:**\n{data['instructional_flow']}")
-                st.markdown(f"**Collaborative Group Activity:**\n{data['group_activity']}")
-
-                # --- GENERATE WORD (.DOCX) TEMPLATE MATCHING ANNEX A ---
+                # --- GENERATE WORD (.DOCX) MATCHING TEMPLATE EXACTLY ---
                 doc = Document()
-                
-                # Header Title
+
+                # Document Header Title
                 p_head = doc.add_paragraph()
                 p_head.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 r_head1 = p_head.add_run(f"ILAW LESSON PLAN ON {subject.upper()}\n")
                 r_head1.bold = True
-                r_head1.font.size = Pt(14)
+                r_head1.font.name = 'Calibri'
+                r_head1.font.size = Pt(13)
+                
                 r_head2 = p_head.add_run("DepEd Order No. 003, s. 2026 (Annex A Template) | COT Indicators Embedded\n")
-                r_head2.font.size = Pt(9)
                 r_head2.font.italic = True
+                r_head2.font.name = 'Calibri'
+                r_head2.font.size = Pt(9.5)
 
-                # Primary Table
+                # Primary Table Structure
                 table = doc.add_table(rows=0, cols=2)
                 table.style = 'Table Grid'
 
@@ -259,35 +304,41 @@ if check_password():
                 add_styled_row(table, "Declaration of AI Use", "AI was utilized to structure content into DepEd Order No. 003, s. 2026 Annex A template & align COT indicators.")
 
                 # Section 1: INTENTIONS
-                add_styled_row(table, "1. INTENTIONS", "")
+                add_table_header_section(table, "1. INTENTIONS")
                 add_styled_row(table, "Learning Competency", data['competency'])
                 add_styled_row(table, "Learning Objectives", data['objectives'])
                 add_styled_row(table, "Learner Context", data['learner_context'])
 
                 # Section 2: LEARNING EXPERIENCE
-                add_styled_row(table, "2. LEARNING EXPERIENCE", "")
-                add_styled_row(table, "Pre-Lesson (Getting Ready)", data['pre_lesson'])
-                add_styled_row(table, "Instructional Flow & Direct Modeling", data['instructional_flow'])
-                add_styled_row(table, "Collaborative Group Activity", data['group_activity'])
+                add_table_header_section(table, "2. LEARNING EXPERIENCE")
+                add_styled_row(table, "Pre-Lesson\n(Getting Ready)", data['pre_lesson'])
+                add_styled_row(table, "Instructional Flow &\nDirect Modeling", data['instructional_flow'])
+                add_styled_row(table, "Collaborative Group\nActivity", data['group_activity'])
                 add_styled_row(table, "Synthesis & Resources", data['synthesis'])
-                add_styled_row(table, "Opportunities for Integration", data['integration'])
+                add_styled_row(table, "Opportunities for\nIntegration", data['integration'])
 
                 # Section 3: ASSESSMENT
-                add_styled_row(table, "3. ASSESSMENT", "")
-                add_styled_row(table, "Formative Assessment (Individual Evaluation)", data['assessment'])
+                add_table_header_section(table, "3. ASSESSMENT")
+                add_styled_row(table, "Formative Assessment\n(Individual Evaluation)", data['assessment'])
 
                 # Section 4: WAYS FORWARD
-                add_styled_row(table, "4. WAYS FORWARD", "")
-                add_styled_row(table, "Extended Learning Opportunities", data['extended_learning'])
+                add_table_header_section(table, "4. WAYS FORWARD")
+                add_styled_row(table, "Extended Learning\nOpportunities", data['extended_learning'])
                 add_styled_row(table, "Teacher Reflections", data['teacher_reflections'])
 
                 # Save Document
                 doc_path = "ILAW_Lesson_Plan_Annex_A.docx"
                 doc.save(doc_path)
 
+                # UI Preview
+                st.subheader("📄 Generated Lesson Plan Preview")
+                st.info("The generated Word document contains yellow text highlights for embedded COT indicators matching Annex A requirements.")
+                st.markdown(f"**Lesson:** {lesson_name} | **Teacher:** {teacher_name}")
+                st.markdown(f"**Competency:** {data['competency']}")
+
                 with open(doc_path, "rb") as file:
                     st.download_button(
-                        label="📥 Download DepEd Order No. 003 Annex A Word Document (.docx)",
+                        label="📥 Download Highlighted Annex A Word Document (.docx)",
                         data=file,
                         file_name=f"ILAW_Lesson_Plan_{lesson_name.replace(' ', '_')}.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -295,4 +346,4 @@ if check_password():
                     )
 
             except Exception as e:
-                st.error(f"Error generating lesson plan: {str(e)}")
+                st.error(f"Error generating lesson plan document: {str(e)}")
