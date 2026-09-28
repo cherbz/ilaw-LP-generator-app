@@ -5,7 +5,7 @@ import streamlit as st
 from datetime import datetime, timedelta, timezone
 import firebase_admin
 from firebase_admin import credentials, firestore
-import google.generativeai as genai
+from google import genai
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -37,47 +37,40 @@ def init_firebase():
 db = init_firebase()
 
 # -------------------------------------------------------------------
-# DYNAMIC GEMINI MODEL RESOLUTION
+# DYNAMIC GEMINI MODEL & CLIENT RESOLUTION
 # -------------------------------------------------------------------
-def get_active_user_model(user_api_key):
+def get_genai_client_and_model(user_api_key):
     """
-    Configures genai with the user's custom API key, dynamically fetches
-    active models, and falls back gracefully to latest flash identifiers.
+    Initializes Google GenAI Client with the user's custom API key,
+    dynamically queries available models, and selects an active Flash model.
     """
     if not user_api_key:
         raise Exception("API key is missing.")
 
-    genai.configure(api_key=user_api_key)
+    # Initialize the modern GenAI Client
+    client = genai.Client(api_key=user_api_key)
 
-    chosen_model_name = None
+    chosen_model = None
 
-    # Priority 1: Fetch active models dynamically from Google AI Studio
     try:
-        available_models = [
-            m.name for m in genai.list_models() 
-            if hasattr(m, 'supported_generation_methods') and 'generateContent' in m.supported_generation_methods
-        ]
-        if available_models:
-            flash_model = next((m for m in available_models if "flash" in m.lower()), None)
-            chosen_model_name = flash_model if flash_model else available_models[0]
-    except Exception as list_err:
+        # Dynamic query for supported generation models
+        all_models = list(client.models.list())
+        clean_models = [m.name.replace("models/", "") for m in all_models]
+
+        # Exclude legacy/deprecated models
+        active_models = [m for m in clean_models if "2.5-flash" not in m and "embedding" not in m]
+
+        # Prioritize available flash models
+        flash_model = next((m for m in active_models if "flash" in m.lower()), None)
+        chosen_model = flash_model if flash_model else (active_models[0] if active_models else None)
+    except Exception:
         pass
 
-    # Priority 2: Safe fallback identifiers if dynamic listing is constrained
-    if not chosen_model_name:
-        candidate_models = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
-        for candidate in candidate_models:
-            try:
-                test_model = genai.GenerativeModel(candidate)
-                chosen_model_name = candidate
-                break
-            except Exception:
-                continue
+    # Fallback default target model
+    if not chosen_model:
+        chosen_model = "gemini-3.8-flash"
 
-    if not chosen_model_name:
-        chosen_model_name = "gemini-3.8-flash"
-
-    return genai.GenerativeModel(chosen_model_name)
+    return client, chosen_model
 
 # -------------------------------------------------------------------
 # COT INDICATOR PRESETS
@@ -417,7 +410,7 @@ if submit_button:
         with st.spinner("Generating DepEd Order No. 003 Annex A ILAW Lesson Plan..."):
             try:
                 # DYNAMIC MODEL AUTO-DISCOVERY BASED ON USER API KEY
-                model = get_active_user_model(user_gemini_key)
+                client, selected_model = get_genai_client_and_model(user_gemini_key)
 
                 cot_list_str = "\n".join([f"- {c}" for c in selected_cots])
 
@@ -455,7 +448,11 @@ if submit_button:
                 3. Output strictly raw JSON (no Markdown block fences, no prose outside JSON).
                 """
 
-                response = model.generate_content(prompt)
+                # Call via modern Client interface
+                response = client.models.generate_content(
+                    model=selected_model,
+                    contents=prompt
+                )
 
                 if not response or not response.text:
                     raise Exception("Received empty response from Gemini API.")
@@ -476,7 +473,7 @@ if submit_button:
 
                 docx_file = create_deped_annex_a_docx(plan_data, metadata)
 
-                st.success("Lesson Plan successfully generated!")
+                st.success(f"Lesson Plan successfully generated using model `{selected_model}`!")
 
                 st.download_button(
                     label="📄 Download as DepEd Annex A Word Document (.docx)",
