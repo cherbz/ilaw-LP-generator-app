@@ -4,9 +4,10 @@ import streamlit as st
 from datetime import datetime, timedelta, timezone
 import firebase_admin
 from firebase_admin import credentials, firestore
+import google.generativeai as genai
 
 # -------------------------------------------------------------------
-# FIREBASE INITIALIZATION (HANDLES STREAMLIT CLOUD, VERCEL & LOCAL)
+# FIREBASE INITIALIZATION (STREAMLIT CLOUD, VERCEL, & LOCAL FALLBACK)
 # -------------------------------------------------------------------
 @st.cache_resource
 def init_firebase():
@@ -31,6 +32,21 @@ def init_firebase():
     return firestore.client()
 
 db = init_firebase()
+
+# -------------------------------------------------------------------
+# GEMINI AI CONFIGURATION
+# -------------------------------------------------------------------
+def configure_gemini():
+    api_key = None
+    if "GEMINI_API_KEY" in st.secrets:
+        api_key = st.secrets["GEMINI_API_KEY"]
+    elif "GEMINI_API_KEY" in os.environ:
+        api_key = os.environ["GEMINI_API_KEY"]
+        
+    if api_key:
+        genai.configure(api_key=api_key)
+        return True
+    return False
 
 # -------------------------------------------------------------------
 # DATABASE HELPER FUNCTIONS
@@ -95,7 +111,7 @@ def redeem_license_key(email, key_string):
     return True, "Success! 1-Year License successfully activated."
 
 # -------------------------------------------------------------------
-# STREAMLIT UI LAYOUT
+# STREAMLIT UI LAYOUT & PAGE CONFIG
 # -------------------------------------------------------------------
 st.set_page_config(page_title="Binonz ILAW Lesson Plan Generator", page_icon="📘", layout="centered")
 
@@ -180,7 +196,7 @@ else:
     st.stop()
 
 # -------------------------------------------------------------------
-# STEP 4: MAIN LESSON PLAN GENERATOR INTERFACE
+# STEP 4: MAIN LESSON PLAN GENERATOR INTERFACE (GEMINI AI INTEGRATED)
 # -------------------------------------------------------------------
 st.title("DepEd ILAW Lesson Plan Generator")
 
@@ -196,18 +212,56 @@ if submit_button:
     if not subject or not topic:
         st.warning("Please fill in all required fields.")
     else:
-        st.success("Generating DepEd ILAW Lesson Plan...")
-        
-        # --- YOUR LESSON PLAN OUTPUT LOGIC HERE ---
-        st.markdown(f"### DepEd ILAW Lesson Plan: {topic}")
-        st.write(f"**Subject:** {subject} | **Grade:** {grade_level} | **Quarter:** {quarter}")
-        st.write("---")
-        st.write("**I. Objectives:** Students will demonstrate understanding of the core concepts.")
-        st.write("**II. Learning Resources:** Textbook, Activity Sheets, Presentation Slides.")
-        st.write("**III. Procedures:** Introduction, Guided Practice, Independent Practice, Assessment.")
-        # ------------------------------------------
+        if not configure_gemini():
+            st.error("Missing GEMINI_API_KEY. Please set GEMINI_API_KEY in your Streamlit Cloud Secrets or Environment Variables.")
+        else:
+            with st.spinner("Generating detailed DepEd ILAW Lesson Plan using Gemini AI..."):
+                try:
+                    prompt = f"""
+                    You are an expert DepEd Philippines curriculum developer and master teacher.
+                    Generate a complete, highly detailed DepEd ILAW Lesson Plan for the following details:
+                    
+                    - Subject Area: {subject}
+                    - Grade Level: {grade_level}
+                    - Topic / Competency: {topic}
+                    - Quarter: {quarter}
 
-        # Consume trial if user is on free tier
-        if not has_active_license and not user_data.get("trial_used", False):
-            mark_trial_as_used(user_email)
-            st.warning("⚠️ You have used your 1-time free trial generation. Activate a 1-Year License Key in the sidebar to generate more.")
+                    Strictly organize the lesson plan into the following DepEd ILAW sections using clear Markdown headers:
+
+                    ## DepEd ILAW Lesson Plan: {topic}
+                    **Subject Area:** {subject} | **Grade Level:** {grade_level} | **Quarter:** {quarter}
+
+                    ---
+
+                    ### I. Objectives
+                    - **Knowledge:** 
+                    - **Skills:** 
+                    - **Attitudes/Values:** 
+
+                    ### II. Content & Learning Resources
+                    - **Topic:** {topic}
+                    - **Reference Materials:** DepEd Learning Modules, Curriculum Guide
+                    - **Tools/Equipment Needed:** 
+
+                    ### III. Procedures (ILAW Framework)
+                    - **I - Introduction (Hook & Motivation):** Activity to activate prior knowledge and state learning objectives.
+                    - **L - Learning Activity (Direct Instruction & Exploration):** Step-by-step guided activity or demonstration.
+                    - **A - Application (Hands-on Practice & Transfer):** Individual/Group activity to apply concepts.
+                    - **W - Wrap-Up & Assessment (Evaluation & Synthesis):** Assessment questions/quiz and teacher synthesis.
+
+                    ### IV. Remarks & Reflection
+                    - Space for teacher comments, mastery rate, and remediation needs.
+                    """
+
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    response = model.generate_content(prompt)
+
+                    st.markdown(response.text)
+
+                    # Consume trial only after successful AI generation
+                    if not has_active_license and not user_data.get("trial_used", False):
+                        mark_trial_as_used(user_email)
+                        st.warning("⚠️ You have used your 1-time free trial generation. Activate a 1-Year License Key in the sidebar to generate more.")
+
+                except Exception as e:
+                    st.error(f"Failed to generate lesson plan: {e}")
