@@ -17,7 +17,7 @@ from docx.oxml.ns import qn
 # PAGE CONFIGURATION
 # -------------------------------------------------------------------
 st.set_page_config(
-    page_title="DepEd ILAW Lesson Plan & PPT Generator",
+    page_title="DepEd ILAW Generator with COT Indicators",
     page_icon="📘",
     layout="wide"
 )
@@ -307,7 +307,7 @@ if "user_gemini_key" not in st.session_state:
     st.session_state["user_gemini_key"] = None
 
 if not st.session_state["user_email"] or not st.session_state["user_gemini_key"]:
-    st.title("📘 DepEd ILAW Lesson Plan Generator")
+    st.title("📘 DepEd ILAW Generator with COT Indicators")
     st.markdown("Enter your email address and personal Gemini API key to start generating DepEd Order No. 003 lesson plans.")
 
     with st.form("login_form"):
@@ -378,7 +378,7 @@ with st.sidebar:
 # -------------------------------------------------------------------
 # MAIN DASHBOARD
 # -------------------------------------------------------------------
-st.title("📘 Binonz ILAW Lesson Plan & PPT Generator")
+st.title("📘 DepEd ILAW Generator with COT Indicators")
 st.caption("Aligned with DepEd Order No. 003, s. 2026 (Annex A Template) & RPMS-IPCRF COT Indicators")
 
 with st.form("lesson_form"):
