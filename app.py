@@ -14,140 +14,13 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
 # -------------------------------------------------------------------
-# PAGE CONFIGURATION & CUSTOM CSS STYLING
+# PAGE CONFIGURATION
 # -------------------------------------------------------------------
 st.set_page_config(
-    page_title="DepEd ILAW Lesson Plan Generator",
+    page_title="DepEd ILAW Lesson Plan & PPT Generator",
     page_icon="📘",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
-
-# Custom CSS to replicate the UI layout
-st.markdown("""
-<style>
-    /* Main Background & Font */
-    .stApp {
-        background-color: #F0F4F9;
-        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    }
-
-    /* Top Navigation Header Bar */
-    .top-header {
-        background: linear-gradient(90deg, #0D47A1 0%, #1565C0 60%, #1976D2 100%);
-        padding: 12px 24px;
-        border-radius: 0px 0px 12px 12px;
-        color: white;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
-    
-    .brand-title {
-        font-size: 22px;
-        font-weight: 800;
-        color: #FFFFFF;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    
-    .brand-tagline {
-        font-size: 12px;
-        color: #BBDEFB;
-        font-style: italic;
-    }
-
-    /* Sidebar Custom Styling */
-    [data-testid="stSidebar"] {
-        background-color: #0A2540 !important;
-        color: #FFFFFF;
-    }
-    
-    [data-testid="stSidebar"] * {
-        color: #FFFFFF !important;
-    }
-
-    /* Custom Input Container Card */
-    .input-card {
-        background-color: #FFFFFF;
-        border-radius: 16px;
-        padding: 24px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-        margin-bottom: 20px;
-    }
-
-    /* Input Field Label Styling */
-    .field-label {
-        font-weight: 700;
-        font-size: 14px;
-        margin-bottom: 6px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-    /* Feature Badge Cards */
-    .badge-card {
-        background: #FFFFFF;
-        border-radius: 12px;
-        padding: 12px 16px;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        border: 1px solid #E2E8F0;
-        font-size: 13px;
-        font-weight: 600;
-    }
-
-    /* Footer Feature Cards */
-    .footer-bar {
-        background: #FFFFFF;
-        border-radius: 12px;
-        padding: 16px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        margin-top: 20px;
-    }
-    .footer-item {
-        text-align: center;
-        border-right: 1px solid #E2E8F0;
-    }
-    .footer-item:last-child {
-        border-right: none;
-    }
-    .footer-title {
-        font-weight: 700;
-        color: #0D47A1;
-        font-size: 13px;
-    }
-    .footer-sub {
-        font-size: 11px;
-        color: #64748B;
-    }
-
-    /* Generate Button Styling */
-    div.stButton > button {
-        background: linear-gradient(90deg, #2563EB 0%, #3B82F6 100%) !important;
-        color: white !important;
-        font-weight: 700 !important;
-        font-size: 16px !important;
-        border-radius: 12px !important;
-        padding: 12px 28px !important;
-        border: none !important;
-        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35) !important;
-        width: 100% !important;
-    }
-
-    /* Hide standard Streamlit header/footer padding */
-    .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 2rem !important;
-    }
-</style>
-""", unsafe_allow_html=True)
 
 # -------------------------------------------------------------------
 # FIREBASE INITIALIZATION
@@ -295,7 +168,7 @@ def create_deped_annex_a_docx(plan_data, metadata):
         ("Designed by Teacher/s", metadata.get("teacher_name", "NORBERTO P. BINONDO JR.")),
         ("Grade Level & Section", f"{metadata.get('grade_level', '')} - {metadata.get('section', '')}"),
         ("No. of Sessions", metadata.get("sessions", "1")),
-        ("References", metadata.get("references", "DepEd K-12 Curriculum Guide & Learning Materials")),
+        ("References", metadata.get("references", "DepEd Curriculum Guide & Presentation Slides")),
     ]
 
     for i, (label, val) in enumerate(meta_rows):
@@ -463,23 +336,13 @@ if user_data.get("license_expires_at") and user_data["license_expires_at"] > now
     has_active_license = True
 
 # -------------------------------------------------------------------
-# SIDEBAR NAVIGATION
+# SIDEBAR
 # -------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("### 🏠 Navigation")
-    st.markdown("- 📊 **Dashboard**")
-    st.markdown("- 📁 **My Lesson Plans**")
-    st.markdown("- 📑 **Templates (Annex A)**")
-    st.markdown("- 🎯 **COT Indicators**")
-    st.markdown("- 📚 **Resources**")
-    st.markdown("- ⚙️ **Settings**")
-    st.markdown("- ❓ **Help & Support**")
+    st.title("⚙️ Account & License")
+    st.write(f"Logged in as: **{user_email}**")
     
-    st.divider()
-
-    st.markdown("### 👤 Account Overview")
-    st.caption(f"Logged in as:\n**{user_email}**")
-    if st.button("🔑 Switch Account / API Key"):
+    if st.button("Switch Account / API Key"):
         st.session_state["user_email"] = None
         st.session_state["user_gemini_key"] = None
         st.rerun()
@@ -488,12 +351,12 @@ with st.sidebar:
 
     if has_active_license:
         days_left = (user_data["license_expires_at"] - now).days
-        st.success(f"👑 **Active Subscription** ({days_left} days left)")
+        st.success(f"👑 **Active License**: {days_left} days remaining.")
     else:
         st.warning("🔴 **No Active License**")
 
-    st.markdown("#### Redeem License Key")
-    key_input = st.text_input("Enter Key:", key="license_key_sidebar").strip()
+    st.subheader("Redeem License Key")
+    key_input = st.text_input("Enter Key:").strip()
     if st.button("Activate Key"):
         if key_input:
             success, msg = redeem_license_key(user_email, key_input)
@@ -504,107 +367,35 @@ with st.sidebar:
                 st.error(msg)
 
     st.divider()
-    st.markdown("### 📌 COT Indicators")
+    st.subheader("🎯 COT Indicators Target")
     teacher_rank = st.selectbox("Select Rank:", list(COT_INDICATOR_OPTIONS.keys()))
     available_indicators = COT_INDICATOR_OPTIONS[teacher_rank]
     selected_cots = []
     for cot in available_indicators:
-        if st.checkbox(cot, value=True, key=f"cot_{cot[:5]}"):
+        if st.checkbox(cot, value=True):
             selected_cots.append(cot)
 
 # -------------------------------------------------------------------
-# MAIN DASHBOARD UI
+# MAIN DASHBOARD
 # -------------------------------------------------------------------
+st.title("📘 Binonz ILAW Lesson Plan & PPT Generator")
+st.caption("Aligned with DepEd Order No. 003, s. 2026 (Annex A Template) & RPMS-IPCRF COT Indicators")
 
-# Top Blue Navigation Banner
-st.markdown("""
-<div class="top-header">
-    <div>
-        <div class="brand-title">📘 DepEd ILAW <span style="font-size: 14px; font-weight: 400; opacity: 0.9;">Lesson Plan Generator</span></div>
-        <div class="brand-tagline">Plan • Teach • Inspire — Quality Lessons for a Brighter Future</div>
-    </div>
-    <div style="font-size: 13px; background: rgba(255,255,255,0.15); padding: 6px 14px; border-radius: 20px;">
-        👨‍🏫 <b>Teacher Mode</b> | DepEd Educator
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# Hero Branding Banner
-st.markdown("""
-<div style="background: linear-gradient(135deg, #EBF3FE 0%, #C6E0FF 100%); border-radius: 16px; padding: 24px 32px; margin-bottom: 24px; border: 1px solid #B8D8FF; display: flex; justify-content: space-between; align-items: center;">
-    <div>
-        <h2 style="color: #0D47A1; font-size: 28px; font-weight: 900; margin: 0;">💡 DepEd ILAW Lesson Plan <span style="color: #F57C00;">Generator</span></h2>
-        <p style="color: #1565C0; font-size: 14px; font-weight: 600; margin-top: 6px;">Aligned with DepEd Order No. 003, s. 2026 Annex A Template & COT Indicators</p>
-    </div>
-    <div style="background: #FFFFFF; padding: 10px 20px; border-radius: 30px; box-shadow: 0 4px 12px rgba(13,71,161,0.1); color: #0D47A1; font-weight: 800; font-size: 14px;">
-        ✨ Quality Lesson Plans Made Easy!
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# Form Fields Card Layout
-with st.form("deped_ilaw_form"):
-    st.markdown("<h4 style='color: #0D47A1; margin-bottom: 16px;'>📝 Lesson Configuration</h4>", unsafe_allow_html=True)
-    
+with st.form("lesson_form"):
     col1, col2 = st.columns(2)
-    
     with col1:
-        teacher_name = st.text_input("👤 Teacher Name", value="NORBERTO P. BINONDO JR.")
-        subject = st.selectbox("📚 Learning Area / Subject", ["Mathematics", "Science", "English", "Filipino", "Apan", "TLE / CSS", "MAPEH"], index=0)
-        grade_level = st.selectbox("🎓 Grade Level", ["Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"], index=2)
-        section = st.text_input("🏫 Section", value="Kindness")
-
+        teacher_name = st.text_input("Teacher Name", value="NORBERTO P. BINONDO JR.")
+        subject = st.text_input("Subject / Learning Area", value="Mathematics")
+        grade_level = st.text_input("Grade Level", value="Grade 9")
+        section = st.text_input("Section", value="Kindness")
     with col2:
-        topic = st.text_input("🎯 Lesson Topic / Competency", value="Graphing Linear Functions")
-        sessions = st.selectbox("⏱️ No. of Sessions", ["1", "2", "3", "4", "5"], index=0)
-        quarter = st.selectbox("📅 Quarter", ["Quarter 1", "Quarter 2", "Quarter 3", "Quarter 4"], index=0)
-        references = st.text_input("📖 References", value="DepEd Curriculum Guide & Presentation Slides")
+        topic = st.text_input("Lesson Topic / Competency", value="Graphing Linear Functions")
+        sessions = st.text_input("No. of Sessions", value="1")
+        quarter = st.text_input("Quarter", value="Quarter 1")
+        references = st.text_input("References", value="DepEd Curriculum Guide & Presentation Slides")
 
-    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
-    submit_button = st.form_submit_button("✨ Generate DepEd ILAW Lesson Plan ➔")
+    submit_button = st.form_submit_button("⚡ Generate DepEd ILAW Lesson Plan")
 
-# Feature Badges Bar
-col_b1, col_b2, col_b3, col_b4 = st.columns(4)
-with col_b1:
-    st.markdown('<div class="badge-card">📄 <span>Aligned with DepEd Standards</span></div>', unsafe_allow_html=True)
-with col_b2:
-    st.markdown('<div class="badge-card">🎯 <span>COT Indicators Included</span></div>', unsafe_allow_html=True)
-with col_b3:
-    st.markdown('<div class="badge-card">⚡ <span>Easy to Use & Fast</span></div>', unsafe_allow_html=True)
-with col_b4:
-    st.markdown('<div class="badge-card">❤️ <span>Designed for Teachers</span></div>', unsafe_allow_html=True)
-
-# Footer Highlights
-st.markdown("""
-<div class="footer-bar">
-    <div style="display: flex; justify-content: space-around;">
-        <div class="footer-item">
-            <div class="footer-title">⏱️ Save Time</div>
-            <div class="footer-sub">Generate in seconds</div>
-        </div>
-        <div class="footer-item">
-            <div class="footer-title">📄 Professional Format</div>
-            <div class="footer-sub">Ready-to-use template</div>
-        </div>
-        <div class="footer-item">
-            <div class="footer-title">🎯 Curriculum Aligned</div>
-            <div class="footer-sub">DepEd Order No. 003, s. 2026</div>
-        </div>
-        <div class="footer-item">
-            <div class="footer-title">📥 Download / Export</div>
-            <div class="footer-sub">Save or print your plan</div>
-        </div>
-        <div class="footer-item">
-            <div class="footer-title">💙 For Better Learning</div>
-            <div class="footer-sub">Support every Filipino learner</div>
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# -------------------------------------------------------------------
-# GENERATION LOGIC
-# -------------------------------------------------------------------
 if submit_button:
     if not subject or not topic:
         st.warning("Please fill in all required fields.")
