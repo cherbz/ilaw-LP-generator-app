@@ -6,25 +6,24 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 # -------------------------------------------------------------------
-# FIREBASE INITIALIZATION
+# FIREBASE INITIALIZATION (HANDLES STREAMLIT CLOUD, VERCEL & LOCAL)
 # -------------------------------------------------------------------
 @st.cache_resource
 def init_firebase():
     if not firebase_admin._apps:
-        # 1. Try reading from Vercel Environment Variable
-        if "FIREBASE_CREDENTIALS" in os.environ:
-            cred_json = json.loads(os.environ["FIREBASE_CREDENTIALS"])
-            # Fix newline formatting for RSA Private Key if needed
-            if isinstance(cred_json, dict) and "private_key" in cred_json:
-                cred_json["private_key"] = cred_json["private_key"].replace("\\n", "\n")
-            cred = credentials.Certificate(cred_json)
-        # 2. Try reading from Streamlit secrets (.streamlit/secrets.toml)
-        elif "firebase" in st.secrets:
+        # 1. Try reading from Streamlit Secrets (Streamlit Community Cloud)
+        if "firebase" in st.secrets:
             cred_dict = dict(st.secrets["firebase"])
             if "private_key" in cred_dict:
                 cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
             cred = credentials.Certificate(cred_dict)
-        # 3. Fallback to local JSON file for offline local testing
+        # 2. Try reading from Vercel Environment Variables
+        elif "FIREBASE_CREDENTIALS" in os.environ:
+            cred_json = json.loads(os.environ["FIREBASE_CREDENTIALS"])
+            if isinstance(cred_json, dict) and "private_key" in cred_json:
+                cred_json["private_key"] = cred_json["private_key"].replace("\\n", "\n")
+            cred = credentials.Certificate(cred_json)
+        # 3. Fallback to local serviceAccountKey.json for offline testing
         else:
             cred = credentials.Certificate("serviceAccountKey.json")
             
@@ -86,7 +85,7 @@ def redeem_license_key(email, key_string):
         "license_expires_at": new_expiry
     })
 
-    # 2. Mark license key as used permanently
+    # 2. Mark license key as claimed permanently
     key_ref.update({
         "is_used": True,
         "used_by": email,
@@ -120,7 +119,7 @@ if not st.session_state["user_email"]:
             st.error("Please enter a valid email address.")
     st.stop()
 
-# Fetch user details
+# Fetch user subscription details
 user_email = st.session_state["user_email"]
 user_data = get_or_create_user(user_email)
 
