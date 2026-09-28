@@ -1,6 +1,7 @@
 import os
 import io
 import json
+import time
 import streamlit as st
 from datetime import datetime, timedelta, timezone
 import firebase_admin
@@ -37,40 +38,73 @@ def init_firebase():
 db = init_firebase()
 
 # -------------------------------------------------------------------
-# DYNAMIC GEMINI MODEL & CLIENT RESOLUTION
+# DYNAMIC GEMINI MODEL & CLIENT RESOLUTION WITH FALLBACKS
 # -------------------------------------------------------------------
-def get_genai_client_and_model(user_api_key):
+def get_candidate_models(user_api_key):
     """
-    Initializes Google GenAI Client with the user's custom API key,
-    dynamically queries available models, and selects an active Flash model.
+    Initializes Google GenAI Client and returns an ordered list of candidate models
+    for automatic fallback handling in case of high demand (503 errors).
     """
     if not user_api_key:
         raise Exception("API key is missing.")
 
-    # Initialize the modern GenAI Client
     client = genai.Client(api_key=user_api_key)
-
-    chosen_model = None
+    candidate_models = []
 
     try:
-        # Dynamic query for supported generation models
         all_models = list(client.models.list())
         clean_models = [m.name.replace("models/", "") for m in all_models]
 
-        # Exclude legacy/deprecated models
-        active_models = [m for m in clean_models if "2.5-flash" not in m and "embedding" not in m]
+        # Filter out legacy or embedding models
+        active_models = [
+            m for m in clean_models 
+            if "2.5-flash" not in m and "embedding" not in m and "tts" not in m
+        ]
 
-        # Prioritize available flash models
-        flash_model = next((m for m in active_models if "flash" in m.lower()), None)
-        chosen_model = flash_model if flash_model else (active_models[0] if active_models else None)
+        # Rank flash models first
+        flash_models = [m for m in active_models if "flash" in m.lower()]
+        other_models = [m for m in active_models if m not in flash_models]
+        
+        candidate_models = flash_models + other_models
     except Exception:
         pass
 
-    # Fallback default target model
-    if not chosen_model:
-        chosen_model = "gemini-3.8-flash"
+    # Ensure robust defaults are present
+    defaults = ["gemini-3.8-flash", "gemini-3.5-flash"]
+    for d in defaults:
+        if d not in candidate_models:
+            candidate_models.append(d)
 
-    return client, chosen_model
+    return client, candidate_models
+
+def generate_with_fallback(client, candidate_models, prompt):
+    """
+    Attempts content generation, automatically falling back to secondary models 
+    or retrying when encountering 503 high-demand errors.
+    """
+    last_exception = None
+
+    for model_name in candidate_models:
+        # Try up to 2 times per candidate model with a short pause
+        for attempt in range(2):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt
+                )
+                if response and response.text:
+                    return response.text, model_name
+            except Exception as e:
+                last_exception = e
+                err_msg = str(e)
+                # If experiencing high demand (503), wait brief moment or try next model
+                if "503" in err_msg or "UNAVAILABLE" in err_msg or "high demand" in err_msg:
+                    time.sleep(1.5)
+                    continue
+                else:
+                    break  # Break inner loop on non-503 errors and attempt next model
+
+    raise Exception(f"All model attempts failed. Last error: {last_exception}")
 
 # -------------------------------------------------------------------
 # COT INDICATOR PRESETS
@@ -409,9 +443,7 @@ if submit_button:
     else:
         with st.spinner("Generating DepEd Order No. 003 Annex A ILAW Lesson Plan..."):
             try:
-                # DYNAMIC MODEL AUTO-DISCOVERY BASED ON USER API KEY
-                client, selected_model = get_genai_client_and_model(user_gemini_key)
-
+                client, candidate_models = get_candidate_models(user_gemini_key)
                 cot_list_str = "\n".join([f"- {c}" for c in selected_cots])
 
                 prompt = f"""
@@ -448,16 +480,10 @@ if submit_button:
                 3. Output strictly raw JSON (no Markdown block fences, no prose outside JSON).
                 """
 
-                # Call via modern Client interface
-                response = client.models.generate_content(
-                    model=selected_model,
-                    contents=prompt
-                )
-
-                if not response or not response.text:
-                    raise Exception("Received empty response from Gemini API.")
+                # Call generation with automated fallback loop
+                response_text, used_model = generate_with_fallback(client, candidate_models, prompt)
                 
-                clean_text = response.text.strip().replace("```json", "").replace("```", "")
+                clean_text = response_text.strip().replace("```json", "").replace("```", "")
                 plan_data = json.loads(clean_text)
 
                 metadata = {
@@ -473,7 +499,7 @@ if submit_button:
 
                 docx_file = create_deped_annex_a_docx(plan_data, metadata)
 
-                st.success(f"Lesson Plan successfully generated using model `{selected_model}`!")
+                st.success(f"Lesson Plan successfully generated using model `{used_model}`!")
 
                 st.download_button(
                     label="📄 Download as DepEd Annex A Word Document (.docx)",
