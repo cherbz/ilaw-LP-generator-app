@@ -1,10 +1,13 @@
 import os
+import io
 import json
 import streamlit as st
 from datetime import datetime, timedelta, timezone
 import firebase_admin
 from firebase_admin import credentials, firestore
 import google.generativeai as genai
+from docx import Document
+from docx.shared import Inches, Pt, RGBColor
 
 # -------------------------------------------------------------------
 # FIREBASE INITIALIZATION (STREAMLIT CLOUD, VERCEL, & LOCAL FALLBACK)
@@ -49,6 +52,42 @@ def configure_gemini():
     return False
 
 # -------------------------------------------------------------------
+# WORD DOCUMENT GENERATOR FUNCTION (.DOCX)
+# -------------------------------------------------------------------
+def create_docx(subject, grade, quarter, topic, content):
+    doc = Document()
+    
+    # Title
+    doc.add_heading('DepEd ILAW Lesson Plan', level=0)
+    
+    # Metadata Subtitle
+    p = doc.add_paragraph()
+    p.add_run("Subject Area: ").bold = True
+    p.add_run(f"{subject} | ")
+    p.add_run("Grade Level: ").bold = True
+    p.add_run(f"{grade} | ")
+    p.add_run("Quarter: ").bold = True
+    p.add_run(f"{quarter}\n")
+    p.add_run("Topic / Competency: ").bold = True
+    p.add_run(f"{topic}")
+    
+    doc.add_heading('Lesson Content', level=1)
+    
+    # Add generated content paragraphs
+    for paragraph in content.split('\n'):
+        if paragraph.strip().startswith('#'):
+            clean_text = paragraph.replace('#', '').strip()
+            doc.add_heading(clean_text, level=2)
+        elif paragraph.strip():
+            doc.add_paragraph(paragraph.strip())
+            
+    # Save to in-memory byte buffer
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+# -------------------------------------------------------------------
 # DATABASE HELPER FUNCTIONS
 # -------------------------------------------------------------------
 def get_or_create_user(email):
@@ -82,7 +121,7 @@ def redeem_license_key(email, key_string):
     key_data = key_doc.to_dict()
 
     if key_data.get("is_used"):
-        return False, "This license key has already been redeemed by another email account."
+        return False, "This license key has already been redeemed by another account."
 
     now = datetime.now(timezone.utc)
     user_ref = db.collection("users").document(email)
@@ -90,18 +129,15 @@ def redeem_license_key(email, key_string):
 
     current_expiry = user_doc.get("license_expires_at")
     
-    # Extend license by 365 days if user already has an active plan, else start from today
     if current_expiry and current_expiry > now:
         new_expiry = current_expiry + timedelta(days=365)
     else:
         new_expiry = now + timedelta(days=365)
 
-    # 1. Update user expiration
     user_ref.update({
         "license_expires_at": new_expiry
     })
 
-    # 2. Mark license key as claimed permanently
     key_ref.update({
         "is_used": True,
         "used_by": email,
@@ -253,10 +289,22 @@ if submit_button:
                     - Space for teacher comments, mastery rate, and remediation needs.
                     """
 
-                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    model = genai.GenerativeModel('gemini-1.5-flash')
                     response = model.generate_content(prompt)
 
+                    # Display on-screen preview
                     st.markdown(response.text)
+
+                    # Generate Word (.docx) file
+                    docx_file = create_docx(subject, grade_level, quarter, topic, response.text)
+
+                    # Display direct Word document download button
+                    st.download_button(
+                        label="📄 Download as Word Document (.docx)",
+                        data=docx_file,
+                        file_name=f"ILAW_Lesson_Plan_{subject}_{topic}.docx".replace(" ", "_"),
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    )
 
                     # Consume trial only after successful AI generation
                     if not has_active_license and not user_data.get("trial_used", False):
