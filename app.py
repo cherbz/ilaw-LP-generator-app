@@ -253,7 +253,7 @@ if submit_button:
                     - Space for teacher comments, mastery rate, and remediation needs.
                     """
 
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    model = genai.GenerativeModel('gemini-2.5-flash')
                     response = model.generate_content(prompt)
 
                     st.markdown(response.text)
