@@ -428,23 +428,29 @@ if submit_button:
                     3. Output strictly raw JSON (no Markdown block fences, no prose outside JSON).
                     """
 
-                    # Model fallback loop with user key
-                    model_names = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-latest']
-                    response = None
-                    last_error = None
+                    # Dynamic model discovery using the user's specific API key capabilities
+                    available_models = []
+                    for m in genai.list_models():
+                        if 'generateContent' in m.supported_generation_methods:
+                            available_models.append(m.name)
 
-                    for model_name in model_names:
-                        try:
-                            model = genai.GenerativeModel(model_name)
-                            response = model.generate_content(prompt)
-                            if response and response.text:
-                                break
-                        except Exception as e:
-                            last_error = e
-                            continue
+                    if not available_models:
+                        raise Exception("No text generation models available for this API Key.")
+
+                    # Prefer flash models first, otherwise pick the first available active model
+                    chosen_model_name = None
+                    for m_name in available_models:
+                        if 'flash' in m_name:
+                            chosen_model_name = m_name
+                            break
+                    if not chosen_model_name:
+                        chosen_model_name = available_models[0]
+
+                    model = genai.GenerativeModel(chosen_model_name)
+                    response = model.generate_content(prompt)
 
                     if not response or not response.text:
-                        raise Exception(f"Failed to generate content: {last_error}")
+                        raise Exception("Received empty response from the Gemini API.")
                     
                     # Parse JSON Output
                     clean_text = response.text.strip().replace("```json", "").replace("```", "")
