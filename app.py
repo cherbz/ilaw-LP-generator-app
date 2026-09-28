@@ -42,25 +42,40 @@ db = init_firebase()
 def get_active_user_model(user_api_key):
     """
     Configures genai with the user's custom API key, dynamically fetches
-    all models supporting generateContent, and picks an active model.
+    active models, and falls back gracefully to latest flash identifiers.
     """
     if not user_api_key:
         raise Exception("API key is missing.")
 
     genai.configure(api_key=user_api_key)
 
-    # Fetch available models registered for this specific API key directly from Google
-    available_models = [
-        m.name for m in genai.list_models() 
-        if 'generateContent' in m.supported_generation_methods
-    ]
+    chosen_model_name = None
 
-    if not available_models:
-        raise Exception("No active content generation models available for this API key.")
+    # Priority 1: Fetch active models dynamically from Google AI Studio
+    try:
+        available_models = [
+            m.name for m in genai.list_models() 
+            if hasattr(m, 'supported_generation_methods') and 'generateContent' in m.supported_generation_methods
+        ]
+        if available_models:
+            flash_model = next((m for m in available_models if "flash" in m.lower()), None)
+            chosen_model_name = flash_model if flash_model else available_models[0]
+    except Exception as list_err:
+        pass
 
-    # Prioritize flash models for speed, or pick the first available active model
-    flash_model = next((m for m in available_models if "flash" in m.lower()), None)
-    chosen_model_name = flash_model if flash_model else available_models[0]
+    # Priority 2: Safe fallback identifiers if dynamic listing is constrained
+    if not chosen_model_name:
+        candidate_models = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
+        for candidate in candidate_models:
+            try:
+                test_model = genai.GenerativeModel(candidate)
+                chosen_model_name = candidate
+                break
+            except Exception:
+                continue
+
+    if not chosen_model_name:
+        chosen_model_name = "gemini-3.8-flash"
 
     return genai.GenerativeModel(chosen_model_name)
 
