@@ -49,16 +49,16 @@ def get_active_user_model(user_api_key):
 
     genai.configure(api_key=user_api_key)
 
-    # Fetch available models registered for this specific API key
-    available_models = []
-    for model in genai.list_models():
-        if 'generateContent' in model.supported_generation_methods:
-            available_models.append(model.name)
+    # Fetch available models registered for this specific API key directly from Google
+    available_models = [
+        m.name for m in genai.list_models() 
+        if 'generateContent' in m.supported_generation_methods
+    ]
 
     if not available_models:
         raise Exception("No active content generation models available for this API key.")
 
-    # Prioritize flash models for optimal speed, or fall back to any available model
+    # Prioritize flash models for speed, or pick the first available active model
     flash_model = next((m for m in available_models if "flash" in m.lower()), None)
     chosen_model_name = flash_model if flash_model else available_models[0]
 
@@ -98,7 +98,6 @@ COT_INDICATOR_OPTIONS = {
     ]
 }
 
-# Helper function to set table cell background color in docx
 def set_cell_background(cell, fill_hex):
     tcPr = cell._element.get_or_add_tcPr()
     shd = OxmlElement('w:shd')
@@ -108,19 +107,17 @@ def set_cell_background(cell, fill_hex):
     tcPr.append(shd)
 
 # -------------------------------------------------------------------
-# DEPED ANNEX A WORD DOCX BUILDER (TABLE-BASED)
+# DEPED ANNEX A WORD DOCX BUILDER
 # -------------------------------------------------------------------
 def create_deped_annex_a_docx(plan_data, metadata):
     doc = Document()
 
-    # Page setup - Margins
     for section in doc.sections:
         section.top_margin = Inches(0.8)
         section.bottom_margin = Inches(0.8)
         section.left_margin = Inches(0.8)
         section.right_margin = Inches(0.8)
 
-    # Document Header Title
     header_p = doc.add_paragraph()
     header_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_title = header_p.add_run(f"ILAW LESSON PLAN ON {metadata['subject'].upper()}\n")
@@ -133,7 +130,6 @@ def create_deped_annex_a_docx(plan_data, metadata):
     run_sub.font.italic = True
     run_sub.font.color.rgb = RGBColor(100, 100, 100)
 
-    # --- METADATA TABLE ---
     meta_table = doc.add_table(rows=6, cols=2)
     meta_table.style = 'Table Grid'
     
@@ -165,7 +161,6 @@ def create_deped_annex_a_docx(plan_data, metadata):
 
     doc.add_paragraph().paragraph_format.space_after = Pt(6)
 
-    # --- MAIN SECTIONS TABLE BUILDER ---
     def add_section_header(title):
         p = doc.add_paragraph()
         p.paragraph_format.space_before = Pt(12)
@@ -230,7 +225,6 @@ def create_deped_annex_a_docx(plan_data, metadata):
                     r2 = p2.add_run(line)
                     r2.font.size = Pt(10)
 
-    # Save to byte stream
     buffer = io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
@@ -301,7 +295,7 @@ if not st.session_state["user_email"] or not st.session_state["user_gemini_key"]
 
     with st.form("login_form"):
         email_input = st.text_input("Enter Email Address:").strip().lower()
-        api_key_input = st.text_input("Enter Your Gemini API Key:", type="password", help="Don't have a key? Get a free API key from Google AI Studio.").strip()
+        api_key_input = st.text_input("Enter Your Gemini API Key:", type="password", help="Get a free API key from Google AI Studio.").strip()
         
         st.caption("🔑 Don't have an API key? Get your free key instantly from [Google AI Studio](https://aistudio.google.com/app/apikey).")
         
@@ -361,7 +355,6 @@ with st.sidebar:
 
     st.divider()
 
-    # --- COT INDICATORS SELECTION PANEL ---
     st.subheader("📌 Target COT Indicators")
     teacher_rank = st.selectbox("Select Your Teacher Rank:", list(COT_INDICATOR_OPTIONS.keys()))
     
@@ -408,7 +401,7 @@ if submit_button:
     else:
         with st.spinner("Generating DepEd Order No. 003 Annex A ILAW Lesson Plan..."):
             try:
-                # Dynamic model resolution based on user API key
+                # DYNAMIC MODEL AUTO-DISCOVERY BASED ON USER API KEY
                 model = get_active_user_model(user_gemini_key)
 
                 cot_list_str = "\n".join([f"- {c}" for c in selected_cots])
@@ -452,7 +445,6 @@ if submit_button:
                 if not response or not response.text:
                     raise Exception("Received empty response from Gemini API.")
                 
-                # Parse JSON Output
                 clean_text = response.text.strip().replace("```json", "").replace("```", "")
                 plan_data = json.loads(clean_text)
 
@@ -467,12 +459,10 @@ if submit_button:
                     "references": references
                 }
 
-                # Render Document in Memory
                 docx_file = create_deped_annex_a_docx(plan_data, metadata)
 
                 st.success("Lesson Plan successfully generated!")
 
-                # Download Button
                 st.download_button(
                     label="📄 Download as DepEd Annex A Word Document (.docx)",
                     data=docx_file,
@@ -480,14 +470,12 @@ if submit_button:
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
 
-                # Display Preview UI
                 st.divider()
                 st.subheader(f"ILAW LESSON PLAN ON {subject.upper()}")
                 st.caption("DepEd Order No. 003, s. 2026 (Annex A Template)")
 
                 st.json(plan_data)
 
-                # Consume trial if un-subscribed
                 if not has_active_license and not user_data.get("trial_used", False):
                     mark_trial_as_used(user_email)
                     st.warning("⚠️ Free trial generation used. Please activate a 1-Year License key for continued access.")
