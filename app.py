@@ -14,6 +14,142 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
 # -------------------------------------------------------------------
+# PAGE CONFIGURATION & CUSTOM CSS STYLING
+# -------------------------------------------------------------------
+st.set_page_config(
+    page_title="DepEd ILAW Lesson Plan Generator",
+    page_icon="📘",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS to replicate the UI layout
+st.markdown("""
+<style>
+    /* Main Background & Font */
+    .stApp {
+        background-color: #F0F4F9;
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    /* Top Navigation Header Bar */
+    .top-header {
+        background: linear-gradient(90deg, #0D47A1 0%, #1565C0 60%, #1976D2 100%);
+        padding: 12px 24px;
+        border-radius: 0px 0px 12px 12px;
+        color: white;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .brand-title {
+        font-size: 22px;
+        font-weight: 800;
+        color: #FFFFFF;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .brand-tagline {
+        font-size: 12px;
+        color: #BBDEFB;
+        font-style: italic;
+    }
+
+    /* Sidebar Custom Styling */
+    [data-testid="stSidebar"] {
+        background-color: #0A2540 !important;
+        color: #FFFFFF;
+    }
+    
+    [data-testid="stSidebar"] * {
+        color: #FFFFFF !important;
+    }
+
+    /* Custom Input Container Card */
+    .input-card {
+        background-color: #FFFFFF;
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        margin-bottom: 20px;
+    }
+
+    /* Input Field Label Styling */
+    .field-label {
+        font-weight: 700;
+        font-size: 14px;
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    /* Feature Badge Cards */
+    .badge-card {
+        background: #FFFFFF;
+        border-radius: 12px;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        border: 1px solid #E2E8F0;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    /* Footer Feature Cards */
+    .footer-bar {
+        background: #FFFFFF;
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        margin-top: 20px;
+    }
+    .footer-item {
+        text-align: center;
+        border-right: 1px solid #E2E8F0;
+    }
+    .footer-item:last-child {
+        border-right: none;
+    }
+    .footer-title {
+        font-weight: 700;
+        color: #0D47A1;
+        font-size: 13px;
+    }
+    .footer-sub {
+        font-size: 11px;
+        color: #64748B;
+    }
+
+    /* Generate Button Styling */
+    div.stButton > button {
+        background: linear-gradient(90deg, #2563EB 0%, #3B82F6 100%) !important;
+        color: white !important;
+        font-weight: 700 !important;
+        font-size: 16px !important;
+        border-radius: 12px !important;
+        padding: 12px 28px !important;
+        border: none !important;
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35) !important;
+        width: 100% !important;
+    }
+
+    /* Hide standard Streamlit header/footer padding */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 2rem !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# -------------------------------------------------------------------
 # FIREBASE INITIALIZATION
 # -------------------------------------------------------------------
 @st.cache_resource
@@ -38,13 +174,9 @@ def init_firebase():
 db = init_firebase()
 
 # -------------------------------------------------------------------
-# DYNAMIC GEMINI MODEL & CLIENT RESOLUTION WITH FALLBACKS
+# DYNAMIC GEMINI MODEL RESOLUTION WITH FALLBACKS
 # -------------------------------------------------------------------
 def get_candidate_models(user_api_key):
-    """
-    Initializes Google GenAI Client and returns an ordered list of candidate models
-    for automatic fallback handling in case of high demand (503 errors).
-    """
     if not user_api_key:
         raise Exception("API key is missing.")
 
@@ -55,13 +187,11 @@ def get_candidate_models(user_api_key):
         all_models = list(client.models.list())
         clean_models = [m.name.replace("models/", "") for m in all_models]
 
-        # Filter out legacy or embedding models
         active_models = [
             m for m in clean_models 
             if "2.5-flash" not in m and "embedding" not in m and "tts" not in m
         ]
 
-        # Rank flash models first
         flash_models = [m for m in active_models if "flash" in m.lower()]
         other_models = [m for m in active_models if m not in flash_models]
         
@@ -69,7 +199,6 @@ def get_candidate_models(user_api_key):
     except Exception:
         pass
 
-    # Ensure robust defaults are present
     defaults = ["gemini-3.8-flash", "gemini-3.5-flash"]
     for d in defaults:
         if d not in candidate_models:
@@ -78,14 +207,9 @@ def get_candidate_models(user_api_key):
     return client, candidate_models
 
 def generate_with_fallback(client, candidate_models, prompt):
-    """
-    Attempts content generation, automatically falling back to secondary models 
-    or retrying when encountering 503 high-demand errors.
-    """
     last_exception = None
 
     for model_name in candidate_models:
-        # Try up to 2 times per candidate model with a short pause
         for attempt in range(2):
             try:
                 response = client.models.generate_content(
@@ -97,12 +221,11 @@ def generate_with_fallback(client, candidate_models, prompt):
             except Exception as e:
                 last_exception = e
                 err_msg = str(e)
-                # If experiencing high demand (503), wait brief moment or try next model
                 if "503" in err_msg or "UNAVAILABLE" in err_msg or "high demand" in err_msg:
                     time.sleep(1.5)
                     continue
                 else:
-                    break  # Break inner loop on non-503 errors and attempt next model
+                    break
 
     raise Exception(f"All model attempts failed. Last error: {last_exception}")
 
@@ -132,11 +255,6 @@ COT_INDICATOR_OPTIONS = {
         "1.4.3: Evaluate with colleagues teaching strategies that enhance literacy and numeracy skills.",
         "1.5.3: Model effective teaching strategies to develop HOTS.",
         "3.1.3: Lead colleagues in evaluating differentiated strategies."
-    ],
-    "Master Teacher III - V (Distinguished)": [
-        "1.1.4: Lead colleagues in exploring innovative content applications.",
-        "1.4.4: Lead in the design and evaluation of teaching strategies for literacy and numeracy.",
-        "1.5.4: Lead colleagues in developing high-order thinking strategies."
     ]
 }
 
@@ -148,12 +266,8 @@ def set_cell_background(cell, fill_hex):
     shd.set(qn('w:fill'), fill_hex)
     tcPr.append(shd)
 
-# -------------------------------------------------------------------
-# DEPED ANNEX A WORD DOCX BUILDER
-# -------------------------------------------------------------------
 def create_deped_annex_a_docx(plan_data, metadata):
     doc = Document()
-
     for section in doc.sections:
         section.top_margin = Inches(0.8)
         section.bottom_margin = Inches(0.8)
@@ -189,7 +303,6 @@ def create_deped_annex_a_docx(plan_data, metadata):
         c1, c2 = row.cells[0], row.cells[1]
         c1.width = Inches(2.2)
         c2.width = Inches(4.8)
-        
         set_cell_background(c1, "F0F4F8")
         
         p1 = c1.paragraphs[0]
@@ -244,7 +357,6 @@ def create_deped_annex_a_docx(plan_data, metadata):
             c1, c2 = row.cells[0], row.cells[1]
             c1.width = Inches(2.2)
             c2.width = Inches(4.8)
-            
             set_cell_background(c1, "F9FAFB")
             
             p1 = c1.paragraphs[0]
@@ -257,7 +369,6 @@ def create_deped_annex_a_docx(plan_data, metadata):
             for line_idx, line in enumerate(lines):
                 if line_idx > 0:
                     p2 = c2.add_paragraph()
-                
                 if "📌 [COT INDICATOR:" in line:
                     r2 = p2.add_run(line)
                     r2.bold = True
@@ -272,13 +383,9 @@ def create_deped_annex_a_docx(plan_data, metadata):
     buffer.seek(0)
     return buffer
 
-# -------------------------------------------------------------------
-# DATABASE HELPER FUNCTIONS
-# -------------------------------------------------------------------
 def get_or_create_user(email):
     user_ref = db.collection("users").document(email)
     doc = user_ref.get()
-    
     if doc.exists:
         return doc.to_dict()
     else:
@@ -297,13 +404,11 @@ def mark_trial_as_used(email):
 def redeem_license_key(email, key_string):
     key_ref = db.collection("license_keys").document(key_string)
     key_doc = key_ref.get()
-
     if not key_doc.exists:
-        return False, "Invalid License Key. Please check for typos."
-
+        return False, "Invalid License Key."
     key_data = key_doc.to_dict()
     if key_data.get("is_used"):
-        return False, "This license key has already been redeemed."
+        return False, "This key has already been redeemed."
 
     now = datetime.now(timezone.utc)
     user_ref = db.collection("users").document(email)
@@ -318,30 +423,24 @@ def redeem_license_key(email, key_string):
     user_ref.update({"license_expires_at": new_expiry})
     key_ref.update({"is_used": True, "used_by": email, "redeemed_at": now})
 
-    return True, "Success! 1-Year License successfully activated."
+    return True, "1-Year License successfully activated!"
 
 # -------------------------------------------------------------------
-# STREAMLIT UI CONFIG
+# USER AUTHENTICATION & LOGIN SESSION
 # -------------------------------------------------------------------
-st.set_page_config(page_title="Binonz ILAW Lesson Plan Generator", page_icon="📘", layout="wide")
-
 if "user_email" not in st.session_state:
     st.session_state["user_email"] = None
 if "user_gemini_key" not in st.session_state:
     st.session_state["user_gemini_key"] = None
 
-# Step 1: Login & API Key Input Page
 if not st.session_state["user_email"] or not st.session_state["user_gemini_key"]:
-    st.title("📘 Binonz ILAW Lesson Plan Generator")
-    st.markdown("Enter your email address and personal Gemini API key to log in or start your **1 Free Trial** generation.")
+    st.title("📘 DepEd ILAW Lesson Plan Generator")
+    st.markdown("Enter your email address and personal Gemini API key to start generating DepEd Order No. 003 lesson plans.")
 
     with st.form("login_form"):
         email_input = st.text_input("Enter Email Address:").strip().lower()
-        api_key_input = st.text_input("Enter Your Gemini API Key:", type="password", help="Get a free API key from Google AI Studio.").strip()
-        
-        st.caption("🔑 Don't have an API key? Get your free key instantly from [Google AI Studio](https://aistudio.google.com/app/apikey).")
-        
-        login_submitted = st.form_submit_button("Continue")
+        api_key_input = st.text_input("Enter Your Gemini API Key:", type="password").strip()
+        login_submitted = st.form_submit_button("Continue to Dashboard")
 
         if login_submitted:
             if not ("@" in email_input and "." in email_input):
@@ -360,18 +459,27 @@ user_data = get_or_create_user(user_email)
 
 now = datetime.now(timezone.utc)
 has_active_license = False
+if user_data.get("license_expires_at") and user_data["license_expires_at"] > now:
+    has_active_license = True
 
-if user_data.get("license_expires_at"):
-    expires_at = user_data["license_expires_at"]
-    if expires_at > now:
-        has_active_license = True
-
-# Step 2: Sidebar Controls & COT Selection
+# -------------------------------------------------------------------
+# SIDEBAR NAVIGATION
+# -------------------------------------------------------------------
 with st.sidebar:
-    st.subheader("Account Overview")
-    st.write(f"Logged in as: **{user_email}**")
+    st.markdown("### 🏠 Navigation")
+    st.markdown("- 📊 **Dashboard**")
+    st.markdown("- 📁 **My Lesson Plans**")
+    st.markdown("- 📑 **Templates (Annex A)**")
+    st.markdown("- 🎯 **COT Indicators**")
+    st.markdown("- 📚 **Resources**")
+    st.markdown("- ⚙️ **Settings**")
+    st.markdown("- ❓ **Help & Support**")
     
-    if st.button("Switch Account / Change API Key"):
+    st.divider()
+
+    st.markdown("### 👤 Account Overview")
+    st.caption(f"Logged in as:\n**{user_email}**")
+    if st.button("🔑 Switch Account / API Key"):
         st.session_state["user_email"] = None
         st.session_state["user_gemini_key"] = None
         st.rerun()
@@ -380,12 +488,12 @@ with st.sidebar:
 
     if has_active_license:
         days_left = (user_data["license_expires_at"] - now).days
-        st.success(f"🟢 **Active Subscription** ({days_left} days left)")
+        st.success(f"👑 **Active Subscription** ({days_left} days left)")
     else:
-        st.warning("🔴 **No Active Subscription**")
+        st.warning("🔴 **No Active License**")
 
-    st.subheader("Redeem License Key")
-    key_input = st.text_input("Enter 1-Year Key:").strip()
+    st.markdown("#### Redeem License Key")
+    key_input = st.text_input("Enter Key:", key="license_key_sidebar").strip()
     if st.button("Activate Key"):
         if key_input:
             success, msg = redeem_license_key(user_email, key_input)
@@ -396,45 +504,107 @@ with st.sidebar:
                 st.error(msg)
 
     st.divider()
-
-    st.subheader("📌 Target COT Indicators")
-    teacher_rank = st.selectbox("Select Your Teacher Rank:", list(COT_INDICATOR_OPTIONS.keys()))
-    
+    st.markdown("### 📌 COT Indicators")
+    teacher_rank = st.selectbox("Select Rank:", list(COT_INDICATOR_OPTIONS.keys()))
     available_indicators = COT_INDICATOR_OPTIONS[teacher_rank]
     selected_cots = []
-    
-    st.write("Check target indicators to embed:")
     for cot in available_indicators:
         if st.checkbox(cot, value=True, key=f"cot_{cot[:5]}"):
             selected_cots.append(cot)
 
-# Step 3: Access Control Validation
-if not has_active_license and user_data.get("trial_used", False):
-    st.error("🔒 **Trial Expired**")
-    st.write("You have used your 1 free trial generation. Redeem a 1-Year License Key in the sidebar to generate more.")
-    st.stop()
-elif not has_active_license:
-    st.info("🎁 **Free Trial Available:** You have 1 free lesson plan generation remaining.")
+# -------------------------------------------------------------------
+# MAIN DASHBOARD UI
+# -------------------------------------------------------------------
 
-# Step 4: Main Generation Form
-st.title("DepEd ILAW Lesson Plan Generator")
-st.caption("Aligned with DepEd Order No. 003, s. 2026 Annex A Template & COT Indicators")
+# Top Blue Navigation Banner
+st.markdown("""
+<div class="top-header">
+    <div>
+        <div class="brand-title">📘 DepEd ILAW <span style="font-size: 14px; font-weight: 400; opacity: 0.9;">Lesson Plan Generator</span></div>
+        <div class="brand-tagline">Plan • Teach • Inspire — Quality Lessons for a Brighter Future</div>
+    </div>
+    <div style="font-size: 13px; background: rgba(255,255,255,0.15); padding: 6px 14px; border-radius: 20px;">
+        👨‍🏫 <b>Teacher Mode</b> | DepEd Educator
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
+# Hero Branding Banner
+st.markdown("""
+<div style="background: linear-gradient(135deg, #EBF3FE 0%, #C6E0FF 100%); border-radius: 16px; padding: 24px 32px; margin-bottom: 24px; border: 1px solid #B8D8FF; display: flex; justify-content: space-between; align-items: center;">
+    <div>
+        <h2 style="color: #0D47A1; font-size: 28px; font-weight: 900; margin: 0;">💡 DepEd ILAW Lesson Plan <span style="color: #F57C00;">Generator</span></h2>
+        <p style="color: #1565C0; font-size: 14px; font-weight: 600; margin-top: 6px;">Aligned with DepEd Order No. 003, s. 2026 Annex A Template & COT Indicators</p>
+    </div>
+    <div style="background: #FFFFFF; padding: 10px 20px; border-radius: 30px; box-shadow: 0 4px 12px rgba(13,71,161,0.1); color: #0D47A1; font-weight: 800; font-size: 14px;">
+        ✨ Quality Lesson Plans Made Easy!
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# Form Fields Card Layout
 with st.form("deped_ilaw_form"):
+    st.markdown("<h4 style='color: #0D47A1; margin-bottom: 16px;'>📝 Lesson Configuration</h4>", unsafe_allow_html=True)
+    
     col1, col2 = st.columns(2)
+    
     with col1:
-        teacher_name = st.text_input("Teacher Name", value="NORBERTO P. BINONDO JR.")
-        subject = st.text_input("Learning Area / Subject", value="Mathematics")
-        grade_level = st.selectbox("Grade Level", ["Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"], index=2)
-        section = st.text_input("Section", value="Kindness")
+        teacher_name = st.text_input("👤 Teacher Name", value="NORBERTO P. BINONDO JR.")
+        subject = st.selectbox("📚 Learning Area / Subject", ["Mathematics", "Science", "English", "Filipino", "Apan", "TLE / CSS", "MAPEH"], index=0)
+        grade_level = st.selectbox("🎓 Grade Level", ["Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"], index=2)
+        section = st.text_input("🏫 Section", value="Kindness")
+
     with col2:
-        topic = st.text_input("Lesson Topic / Competency", value="Graphing Linear Functions")
-        sessions = st.text_input("No. of Sessions", value="1")
-        quarter = st.selectbox("Quarter", ["Quarter 1", "Quarter 2", "Quarter 3", "Quarter 4"])
-        references = st.text_input("References", value="DepEd Curriculum Guide & Presentation Slides")
+        topic = st.text_input("🎯 Lesson Topic / Competency", value="Graphing Linear Functions")
+        sessions = st.selectbox("⏱️ No. of Sessions", ["1", "2", "3", "4", "5"], index=0)
+        quarter = st.selectbox("📅 Quarter", ["Quarter 1", "Quarter 2", "Quarter 3", "Quarter 4"], index=0)
+        references = st.text_input("📖 References", value="DepEd Curriculum Guide & Presentation Slides")
 
-    submit_button = st.form_submit_button("Generate DepEd ILAW Lesson Plan")
+    st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+    submit_button = st.form_submit_button("✨ Generate DepEd ILAW Lesson Plan ➔")
 
+# Feature Badges Bar
+col_b1, col_b2, col_b3, col_b4 = st.columns(4)
+with col_b1:
+    st.markdown('<div class="badge-card">📄 <span>Aligned with DepEd Standards</span></div>', unsafe_allow_html=True)
+with col_b2:
+    st.markdown('<div class="badge-card">🎯 <span>COT Indicators Included</span></div>', unsafe_allow_html=True)
+with col_b3:
+    st.markdown('<div class="badge-card">⚡ <span>Easy to Use & Fast</span></div>', unsafe_allow_html=True)
+with col_b4:
+    st.markdown('<div class="badge-card">❤️ <span>Designed for Teachers</span></div>', unsafe_allow_html=True)
+
+# Footer Highlights
+st.markdown("""
+<div class="footer-bar">
+    <div style="display: flex; justify-content: space-around;">
+        <div class="footer-item">
+            <div class="footer-title">⏱️ Save Time</div>
+            <div class="footer-sub">Generate in seconds</div>
+        </div>
+        <div class="footer-item">
+            <div class="footer-title">📄 Professional Format</div>
+            <div class="footer-sub">Ready-to-use template</div>
+        </div>
+        <div class="footer-item">
+            <div class="footer-title">🎯 Curriculum Aligned</div>
+            <div class="footer-sub">DepEd Order No. 003, s. 2026</div>
+        </div>
+        <div class="footer-item">
+            <div class="footer-title">📥 Download / Export</div>
+            <div class="footer-sub">Save or print your plan</div>
+        </div>
+        <div class="footer-item">
+            <div class="footer-title">💙 For Better Learning</div>
+            <div class="footer-sub">Support every Filipino learner</div>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# -------------------------------------------------------------------
+# GENERATION LOGIC
+# -------------------------------------------------------------------
 if submit_button:
     if not subject or not topic:
         st.warning("Please fill in all required fields.")
@@ -476,13 +646,11 @@ if submit_button:
 
                 CRITICAL REQUIREMENTS:
                 1. Explicitly attach "📌 [COT INDICATOR: code: description]" at the end of paragraphs where that strategy is applied.
-                2. Provide complete, detailed DepEd-aligned classroom activities, not short summaries.
-                3. Output strictly raw JSON (no Markdown block fences, no prose outside JSON).
+                2. Provide complete, detailed DepEd-aligned classroom activities.
+                3. Output strictly raw JSON.
                 """
 
-                # Call generation with automated fallback loop
                 response_text, used_model = generate_with_fallback(client, candidate_models, prompt)
-                
                 clean_text = response_text.strip().replace("```json", "").replace("```", "")
                 plan_data = json.loads(clean_text)
 
@@ -499,10 +667,10 @@ if submit_button:
 
                 docx_file = create_deped_annex_a_docx(plan_data, metadata)
 
-                st.success(f"Lesson Plan successfully generated using model `{used_model}`!")
+                st.success(f"Lesson Plan generated successfully using model `{used_model}`!")
 
                 st.download_button(
-                    label="📄 Download as DepEd Annex A Word Document (.docx)",
+                    label="📄 Download DepEd Annex A Word Document (.docx)",
                     data=docx_file,
                     file_name=f"ILAW_Lesson_Plan_{subject}_{topic}.docx".replace(" ", "_"),
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -516,7 +684,7 @@ if submit_button:
 
                 if not has_active_license and not user_data.get("trial_used", False):
                     mark_trial_as_used(user_email)
-                    st.warning("⚠️ Free trial generation used. Please activate a 1-Year License key for continued access.")
+                    st.warning("⚠️ Free trial generation used.")
 
             except Exception as e:
                 st.error(f"Error generating lesson plan: {e}")
