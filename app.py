@@ -37,13 +37,32 @@ def init_firebase():
 db = init_firebase()
 
 # -------------------------------------------------------------------
-# USER GEMINI AI CONFIGURATION
+# DYNAMIC GEMINI MODEL RESOLUTION
 # -------------------------------------------------------------------
-def configure_user_gemini(user_api_key):
-    if user_api_key:
-        genai.configure(api_key=user_api_key)
-        return True
-    return False
+def get_active_user_model(user_api_key):
+    """
+    Configures genai with the user's custom API key, dynamically fetches
+    all models supporting generateContent, and picks an active model.
+    """
+    if not user_api_key:
+        raise Exception("API key is missing.")
+
+    genai.configure(api_key=user_api_key)
+
+    # Fetch available models registered for this specific API key
+    available_models = []
+    for model in genai.list_models():
+        if 'generateContent' in model.supported_generation_methods:
+            available_models.append(model.name)
+
+    if not available_models:
+        raise Exception("No active content generation models available for this API key.")
+
+    # Prioritize flash models for optimal speed, or fall back to any available model
+    flash_model = next((m for m in available_models if "flash" in m.lower()), None)
+    chosen_model_name = flash_model if flash_model else available_models[0]
+
+    return genai.GenerativeModel(chosen_model_name)
 
 # -------------------------------------------------------------------
 # COT INDICATOR PRESETS
@@ -275,7 +294,7 @@ if "user_email" not in st.session_state:
 if "user_gemini_key" not in st.session_state:
     st.session_state["user_gemini_key"] = None
 
-# Step 1: Login & API Key Collection
+# Step 1: Login & API Key Input Page
 if not st.session_state["user_email"] or not st.session_state["user_gemini_key"]:
     st.title("📘 Binonz ILAW Lesson Plan Generator")
     st.markdown("Enter your email address and personal Gemini API key to log in or start your **1 Free Trial** generation.")
@@ -311,7 +330,7 @@ if user_data.get("license_expires_at"):
     if expires_at > now:
         has_active_license = True
 
-# Step 2: Sidebar Config & COT Selection
+# Step 2: Sidebar Controls & COT Selection
 with st.sidebar:
     st.subheader("Account Overview")
     st.write(f"Logged in as: **{user_email}**")
@@ -354,7 +373,7 @@ with st.sidebar:
         if st.checkbox(cot, value=True, key=f"cot_{cot[:5]}"):
             selected_cots.append(cot)
 
-# Step 3: Access Control
+# Step 3: Access Control Validation
 if not has_active_license and user_data.get("trial_used", False):
     st.error("🔒 **Trial Expired**")
     st.write("You have used your 1 free trial generation. Redeem a 1-Year License Key in the sidebar to generate more.")
@@ -362,7 +381,7 @@ if not has_active_license and user_data.get("trial_used", False):
 elif not has_active_license:
     st.info("🎁 **Free Trial Available:** You have 1 free lesson plan generation remaining.")
 
-# Step 4: Main Form Interface
+# Step 4: Main Generation Form
 st.title("DepEd ILAW Lesson Plan Generator")
 st.caption("Aligned with DepEd Order No. 003, s. 2026 Annex A Template & COT Indicators")
 
@@ -387,110 +406,91 @@ if submit_button:
     elif not selected_cots:
         st.warning("Please select at least one COT Indicator in the sidebar.")
     else:
-        if not configure_user_gemini(user_gemini_key):
-            st.error("Invalid or missing Gemini API Key. Please log out and enter a valid key.")
-        else:
-            with st.spinner("Generating DepEd Order No. 003 Annex A ILAW Lesson Plan..."):
-                try:
-                    cot_list_str = "\n".join([f"- {c}" for c in selected_cots])
+        with st.spinner("Generating DepEd Order No. 003 Annex A ILAW Lesson Plan..."):
+            try:
+                # Dynamic model resolution based on user API key
+                model = get_active_user_model(user_gemini_key)
 
-                    prompt = f"""
-                    You are a DepEd Master Teacher and Curriculum Expert.
-                    Generate a DepEd ILAW Lesson Plan following DepEd Order No. 003, s. 2026 (Annex A Template).
+                cot_list_str = "\n".join([f"- {c}" for c in selected_cots])
 
-                    METADATA:
-                    - Subject: {subject}
-                    - Grade & Section: {grade_level} - {section}
-                    - Topic: {topic}
-                    - Sessions: {sessions}
-                    
-                    TARGET COT INDICATORS TO EMBED IN THE CONTENT:
-                    {cot_list_str}
+                prompt = f"""
+                You are a DepEd Master Teacher and Curriculum Expert.
+                Generate a DepEd ILAW Lesson Plan following DepEd Order No. 003, s. 2026 (Annex A Template).
 
-                    Respond ONLY in valid JSON format matching this exact schema:
-                    {{
-                        "learning_competency": "...",
-                        "learning_objectives": "1. ...\\n2. ...\\n3. ...\\n📌 [COT INDICATOR: ...]",
-                        "learner_context": "...\\n📌 [COT INDICATOR: ...]",
-                        "pre_lesson": "...\\n📌 [COT INDICATOR: ...]",
-                        "instructional_flow": "...\\n📌 [COT INDICATOR: ...]",
-                        "collaborative_activity": "...\\n📌 [COT INDICATOR: ...]",
-                        "synthesis": "...\\n📌 [COT INDICATOR: ...]",
-                        "integration": "...\\n📌 [COT INDICATOR: ...]",
-                        "formative_assessment": "...\\n📌 [COT INDICATOR: ...]",
-                        "extended_learning": "...",
-                        "teacher_reflections": "..."
-                    }}
+                METADATA:
+                - Subject: {subject}
+                - Grade & Section: {grade_level} - {section}
+                - Topic: {topic}
+                - Sessions: {sessions}
+                
+                TARGET COT INDICATORS TO EMBED IN THE CONTENT:
+                {cot_list_str}
 
-                    CRITICAL REQUIREMENTS:
-                    1. Explicitly attach "📌 [COT INDICATOR: code: description]" at the end of paragraphs where that strategy is applied.
-                    2. Provide complete, detailed DepEd-aligned classroom activities, not short summaries.
-                    3. Output strictly raw JSON (no Markdown block fences, no prose outside JSON).
-                    """
+                Respond ONLY in valid JSON format matching this exact schema:
+                {{
+                    "learning_competency": "...",
+                    "learning_objectives": "1. ...\\n2. ...\\n3. ...\\n📌 [COT INDICATOR: ...]",
+                    "learner_context": "...\\n📌 [COT INDICATOR: ...]",
+                    "pre_lesson": "...\\n📌 [COT INDICATOR: ...]",
+                    "instructional_flow": "...\\n📌 [COT INDICATOR: ...]",
+                    "collaborative_activity": "...\\n📌 [COT INDICATOR: ...]",
+                    "synthesis": "...\\n📌 [COT INDICATOR: ...]",
+                    "integration": "...\\n📌 [COT INDICATOR: ...]",
+                    "formative_assessment": "...\\n📌 [COT INDICATOR: ...]",
+                    "extended_learning": "...",
+                    "teacher_reflections": "..."
+                }}
 
-                    # Dynamic model discovery using the user's specific API key capabilities
-                    available_models = []
-                    for m in genai.list_models():
-                        if 'generateContent' in m.supported_generation_methods:
-                            available_models.append(m.name)
+                CRITICAL REQUIREMENTS:
+                1. Explicitly attach "📌 [COT INDICATOR: code: description]" at the end of paragraphs where that strategy is applied.
+                2. Provide complete, detailed DepEd-aligned classroom activities, not short summaries.
+                3. Output strictly raw JSON (no Markdown block fences, no prose outside JSON).
+                """
 
-                    if not available_models:
-                        raise Exception("No text generation models available for this API Key.")
+                response = model.generate_content(prompt)
 
-                    # Prefer flash models first, otherwise pick the first available active model
-                    chosen_model_name = None
-                    for m_name in available_models:
-                        if 'flash' in m_name:
-                            chosen_model_name = m_name
-                            break
-                    if not chosen_model_name:
-                        chosen_model_name = available_models[0]
+                if not response or not response.text:
+                    raise Exception("Received empty response from Gemini API.")
+                
+                # Parse JSON Output
+                clean_text = response.text.strip().replace("```json", "").replace("```", "")
+                plan_data = json.loads(clean_text)
 
-                    model = genai.GenerativeModel(chosen_model_name)
-                    response = model.generate_content(prompt)
+                metadata = {
+                    "teacher_name": teacher_name,
+                    "subject": subject,
+                    "grade_level": grade_level,
+                    "section": section,
+                    "topic": topic,
+                    "sessions": sessions,
+                    "quarter": quarter,
+                    "references": references
+                }
 
-                    if not response or not response.text:
-                        raise Exception("Received empty response from the Gemini API.")
-                    
-                    # Parse JSON Output
-                    clean_text = response.text.strip().replace("```json", "").replace("```", "")
-                    plan_data = json.loads(clean_text)
+                # Render Document in Memory
+                docx_file = create_deped_annex_a_docx(plan_data, metadata)
 
-                    metadata = {
-                        "teacher_name": teacher_name,
-                        "subject": subject,
-                        "grade_level": grade_level,
-                        "section": section,
-                        "topic": topic,
-                        "sessions": sessions,
-                        "quarter": quarter,
-                        "references": references
-                    }
+                st.success("Lesson Plan successfully generated!")
 
-                    # Render Document in Memory
-                    docx_file = create_deped_annex_a_docx(plan_data, metadata)
+                # Download Button
+                st.download_button(
+                    label="📄 Download as DepEd Annex A Word Document (.docx)",
+                    data=docx_file,
+                    file_name=f"ILAW_Lesson_Plan_{subject}_{topic}.docx".replace(" ", "_"),
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
 
-                    st.success("Lesson Plan successfully generated!")
+                # Display Preview UI
+                st.divider()
+                st.subheader(f"ILAW LESSON PLAN ON {subject.upper()}")
+                st.caption("DepEd Order No. 003, s. 2026 (Annex A Template)")
 
-                    # Download Button
-                    st.download_button(
-                        label="📄 Download as DepEd Annex A Word Document (.docx)",
-                        data=docx_file,
-                        file_name=f"ILAW_Lesson_Plan_{subject}_{topic}.docx".replace(" ", "_"),
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
+                st.json(plan_data)
 
-                    # Display Preview UI
-                    st.divider()
-                    st.subheader(f"ILAW LESSON PLAN ON {subject.upper()}")
-                    st.caption("DepEd Order No. 003, s. 2026 (Annex A Template)")
+                # Consume trial if un-subscribed
+                if not has_active_license and not user_data.get("trial_used", False):
+                    mark_trial_as_used(user_email)
+                    st.warning("⚠️ Free trial generation used. Please activate a 1-Year License key for continued access.")
 
-                    st.json(plan_data)
-
-                    # Consume trial if un-subscribed
-                    if not has_active_license and not user_data.get("trial_used", False):
-                        mark_trial_as_used(user_email)
-                        st.warning("⚠️ Free trial generation used. Please activate a 1-Year License key for continued access.")
-
-                except Exception as e:
-                    st.error(f"Error generating lesson plan: {e}")
+            except Exception as e:
+                st.error(f"Error generating lesson plan: {e}")
