@@ -37,17 +37,11 @@ def init_firebase():
 db = init_firebase()
 
 # -------------------------------------------------------------------
-# GEMINI AI CONFIGURATION
+# USER GEMINI AI CONFIGURATION
 # -------------------------------------------------------------------
-def configure_gemini():
-    api_key = None
-    if "GEMINI_API_KEY" in st.secrets:
-        api_key = st.secrets["GEMINI_API_KEY"]
-    elif "GEMINI_API_KEY" in os.environ:
-        api_key = os.environ["GEMINI_API_KEY"]
-        
-    if api_key:
-        genai.configure(api_key=api_key)
+def configure_user_gemini(user_api_key):
+    if user_api_key:
+        genai.configure(api_key=user_api_key)
         return True
     return False
 
@@ -278,23 +272,35 @@ st.set_page_config(page_title="Binonz ILAW Lesson Plan Generator", page_icon="�
 
 if "user_email" not in st.session_state:
     st.session_state["user_email"] = None
+if "user_gemini_key" not in st.session_state:
+    st.session_state["user_gemini_key"] = None
 
-# Step 1: Login
-if not st.session_state["user_email"]:
+# Step 1: Login & API Key Collection
+if not st.session_state["user_email"] or not st.session_state["user_gemini_key"]:
     st.title("📘 Binonz ILAW Lesson Plan Generator")
-    st.markdown("Enter your email address to log in or start your **1 Free Trial** generation.")
+    st.markdown("Enter your email address and personal Gemini API key to log in or start your **1 Free Trial** generation.")
 
-    email_input = st.text_input("Enter Email Address:").strip().lower()
+    with st.form("login_form"):
+        email_input = st.text_input("Enter Email Address:").strip().lower()
+        api_key_input = st.text_input("Enter Your Gemini API Key:", type="password", help="Don't have a key? Get a free API key from Google AI Studio.").strip()
+        
+        st.caption("🔑 Don't have an API key? Get your free key instantly from [Google AI Studio](https://aistudio.google.com/app/apikey).")
+        
+        login_submitted = st.form_submit_button("Continue")
 
-    if st.button("Continue"):
-        if "@" in email_input and "." in email_input:
-            st.session_state["user_email"] = email_input
-            st.rerun()
-        else:
-            st.error("Please enter a valid email address.")
+        if login_submitted:
+            if not ("@" in email_input and "." in email_input):
+                st.error("Please enter a valid email address.")
+            elif not api_key_input:
+                st.error("Please enter your Gemini API Key.")
+            else:
+                st.session_state["user_email"] = email_input
+                st.session_state["user_gemini_key"] = api_key_input
+                st.rerun()
     st.stop()
 
 user_email = st.session_state["user_email"]
+user_gemini_key = st.session_state["user_gemini_key"]
 user_data = get_or_create_user(user_email)
 
 now = datetime.now(timezone.utc)
@@ -310,8 +316,9 @@ with st.sidebar:
     st.subheader("Account Overview")
     st.write(f"Logged in as: **{user_email}**")
     
-    if st.button("Switch Account"):
+    if st.button("Switch Account / Change API Key"):
         st.session_state["user_email"] = None
+        st.session_state["user_gemini_key"] = None
         st.rerun()
 
     st.divider()
@@ -380,8 +387,8 @@ if submit_button:
     elif not selected_cots:
         st.warning("Please select at least one COT Indicator in the sidebar.")
     else:
-        if not configure_gemini():
-            st.error("Missing GEMINI_API_KEY in secrets/environment variables.")
+        if not configure_user_gemini(user_gemini_key):
+            st.error("Invalid or missing Gemini API Key. Please log out and enter a valid key.")
         else:
             with st.spinner("Generating DepEd Order No. 003 Annex A ILAW Lesson Plan..."):
                 try:
@@ -421,7 +428,7 @@ if submit_button:
                     3. Output strictly raw JSON (no Markdown block fences, no prose outside JSON).
                     """
 
-                    # Updated Model Fallback Chain to prevent 404 endpoint errors
+                    # Model fallback loop with user key
                     model_names = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-latest']
                     response = None
                     last_error = None
@@ -437,7 +444,7 @@ if submit_button:
                             continue
 
                     if not response or not response.text:
-                        raise Exception(f"Failed to generate content with available models: {last_error}")
+                        raise Exception(f"Failed to generate content: {last_error}")
                     
                     # Parse JSON Output
                     clean_text = response.text.strip().replace("```json", "").replace("```", "")
