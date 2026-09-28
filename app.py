@@ -203,7 +203,6 @@ def create_deped_annex_a_docx(plan_data, metadata):
             r1.font.size = Pt(10)
             
             p2 = c2.paragraphs[0]
-            # Formatted text line by line to keep COT indicators intact
             lines = value.split('\n')
             for line_idx, line in enumerate(lines):
                 if line_idx > 0:
@@ -418,12 +417,27 @@ if submit_button:
 
                     CRITICAL REQUIREMENTS:
                     1. Explicitly attach "📌 [COT INDICATOR: code: description]" at the end of paragraphs where that strategy is applied.
-                    2. Provide complete, detailedDepEd-aligned classroom activities, not short summaries.
+                    2. Provide complete, detailed DepEd-aligned classroom activities, not short summaries.
                     3. Output strictly raw JSON (no Markdown block fences, no prose outside JSON).
                     """
 
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    response = model.generate_content(prompt)
+                    # Updated Model Fallback Chain to prevent 404 endpoint errors
+                    model_names = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-latest']
+                    response = None
+                    last_error = None
+
+                    for model_name in model_names:
+                        try:
+                            model = genai.GenerativeModel(model_name)
+                            response = model.generate_content(prompt)
+                            if response and response.text:
+                                break
+                        except Exception as e:
+                            last_error = e
+                            continue
+
+                    if not response or not response.text:
+                        raise Exception(f"Failed to generate content with available models: {last_error}")
                     
                     # Parse JSON Output
                     clean_text = response.text.strip().replace("```json", "").replace("```", "")
