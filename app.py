@@ -6,7 +6,7 @@ import streamlit as st
 from datetime import datetime, timedelta, timezone
 import firebase_admin
 from firebase_admin import credentials, firestore
-from google import genai
+import google.generativeai as genai
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
