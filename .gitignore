@@ -1,1 +1,7 @@
-serviceAccountKey.json 
+*.json
+serviceAccountKey.json
+new secret key binonz-ilaw-generator-firebase-adminsdk-fbsvc-ad133a3e23.json
+license_keys.csv
+serviceAccountKey.json  
+*.json  
+license_keys.csv 
