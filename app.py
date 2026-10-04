@@ -1,162 +1,287 @@
-import os
-import io
-import json
-import time
-import streamlit as st
-from datetime import datetime, timedelta, timezone
-import firebase_admin
-from firebase_admin import credentials, firestore
-import google.generativeai as genai
-from docx import Document
-from docx.shared import Inches, Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
+from flask import Flask, jsonify, request
 
-# --------------------------------------------------
-# PAGE CONFIGURATION
-# --------------------------------------------------
-st.set_page_config(
-    page_title="DepEd ILAW Generator with COT Indicators",
-    page_icon="📘",
-    layout="wide"
-)
+app = Flask(__name__)
 
-# --------------------------------------------------
-# FIREBASE INITIALIZATION
-# --------------------------------------------------
-@st.cache_resource
-def init_firebase():
-    if not firebase_admin._apps:
-        try:
-            if "firebase" in st.secrets:
-                cred_dict = dict(st.secrets["firebase"])
-                if "private_key" in cred_dict:
-                    cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
-                cred = credentials.Certificate(cred_dict)
-                return firebase_admin.initialize_app(cred)
-            elif "FIREBASE_CREDENTIALS" in os.environ:
-                cred_json = json.loads(os.environ["FIREBASE_CREDENTIALS"])
-                if isinstance(cred_json, dict) and "private_key" in cred_json:
-                    cred_json["private_key"] = cred_json["private_key"].replace("\\n", "\n")
-                cred = credentials.Certificate(cred_json)
-                return firebase_admin.initialize_app(cred)
-            elif os.path.exists("serviceAccountKey.json"):
-                cred = credentials.Certificate("serviceAccountKey.json")
-                return firebase_admin.initialize_app(cred)
-            else:
-                return None
-        except Exception as e:
-            return None
-    return firebase_admin.get_app()
+# ==============================================================================
+# DATA STRUCTURES (COT Indicators & Career Stage Rules)
+# ==============================================================================
 
-db = init_firebase()
+CAREER_STAGES = {
+    "beginning_to_proficient": {
+        "title": "Beginning to Proficient",
+        "positions": ["Teacher I", "Teacher II", "Teacher III"],
+        "scale_min": 2,
+        "scale_max": 6,
+        "default_not_observed": 2,
+    },
+    "proficient": {
+        "title": "Proficient",
+        "positions": ["Teacher IV", "Teacher V", "Teacher VI", "Teacher VII"],
+        "scale_min": 3,
+        "scale_max": 7,
+        "default_not_observed": 3,
+    },
+    "highly_proficient": {
+        "title": "Highly Proficient",
+        "positions": ["Master Teacher I", "Master Teacher II"],
+        "scale_min": 4,
+        "scale_max": 8,
+        "default_not_observed": 4,
+    },
+    "distinguished": {
+        "title": "Distinguished",
+        "positions": [
+            "Master Teacher III",
+            "Master Teacher IV",
+            "Master Teacher V",
+        ],
+        "scale_min": 5,
+        "scale_max": 9,
+        "default_not_observed": 5,
+    },
+}
 
-# --------------------------------------------------
-# SESSION STATE INITIALIZATION
-# --------------------------------------------------
-if "authenticated" not in st.session_state:
-    st.session_state["authenticated"] = False
+COT_INDICATORS_BY_SY = {
+    "2025-2026": [
+        {
+            "code": "1.1.2",
+            "description": "Apply knowledge of content within and across curriculum teaching areas",
+        },
+        {
+            "code": "1.4.2",
+            "description": "Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills",
+        },
+        {
+            "code": "1.5.2",
+            "description": "Apply a range of teaching strategies to develop critical and creative thinking, as well as other higher-order thinking skills",
+        },
+        {
+            "code": "2.3.2",
+            "description": "Manage classroom structure to engage learners, individually or in groups, in meaningful exploration, discovery and hands-on activities within a range of physical learning environments",
+        },
+        {
+            "code": "2.6.2",
+            "description": "Manage learner behavior constructively by applying positive and non-violent discipline to ensure learning-focused environments",
+        },
+        {
+            "code": "3.1.2",
+            "description": "Use differentiated, developmentally appropriate learning experiences to address learners' gender, needs, strengths, interests and experiences",
+        },
+        {
+            "code": "4.1.2",
+            "description": "Plan, manage and implement developmentally sequenced teaching and learning process to meet curriculum requirements and varied teaching contexts",
+        },
+        {
+            "code": "4.5.2",
+            "description": "Select, develop, organize and use appropriate teaching and learning resources, including ICT, to address learning goals",
+        },
+        {
+            "code": "5.1.2",
+            "description": "Design, select, organize and use diagnostic, formative and summative assessment strategies consistent with curriculum requirements",
+        },
+    ],
+    "2026-2027": [
+        {
+            "code": "1.1.2",
+            "description": "Apply knowledge of content within and across curriculum teaching areas",
+        },
+        {
+            "code": "1.4.2",
+            "description": "Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills",
+        },
+        {
+            "code": "1.5.2",
+            "description": "Apply a range of teaching strategies to develop critical and creative thinking, as well as other higher-order thinking skills",
+        },
+        {
+            "code": "1.6.2",
+            "description": "Display proficient use of Mother Tongue, Filipino and English to facilitate teaching and learning",
+        },
+        {
+            "code": "2.1.2",
+            "description": "Establish safe and secure learning environments to enhance learning through the consistent implementation of policies, guidelines and procedures",
+        },
+        {
+            "code": "2.2.2",
+            "description": "Maintain learning environments that promote fairness, respect and care to encourage learning",
+        },
+        {
+            "code": "3.2.2",
+            "description": "Establish a learner-centered culture by using teaching strategies that respond to learners' linguistic, cultural, socio-economic and religious backgrounds",
+        },
+        {
+            "code": "3.5.2",
+            "description": "Adapt and use culturally appropriate teaching strategies to address the needs of learners from indigenous groups",
+        },
+        {
+            "code": "5.3.2",
+            "description": "Use strategies for providing timely, accurate and constructive feedback to improve learner performance",
+        },
+    ],
+    "2027-2028": [
+        {
+            "code": "1.1.2",
+            "description": "Apply knowledge of content within and across curriculum teaching areas",
+        },
+        {
+            "code": "1.4.2",
+            "description": "Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills",
+        },
+        {
+            "code": "1.3.2",
+            "description": "Ensure the positive use of ICT to facilitate the teaching and learning process",
+        },
+        {
+            "code": "1.7.2",
+            "description": "Use effective verbal and non-verbal classroom communication strategies to support learner understanding, participation, engagement and achievement",
+        },
+        {
+            "code": "2.4.2",
+            "description": "Maintain supportive learning environments that nurture and inspire learners to participate, cooperate and collaborate in continued learning",
+        },
+        {
+            "code": "2.5.2",
+            "description": "Apply a range of successful strategies that maintain learning environments that motivate learners to work productively by assuming responsibility for their own learning",
+        },
+        {
+            "code": "3.3.2",
+            "description": "Design, adapt and implement teaching strategies that are responsive to learners with disabilities, giftedness and talents",
+        },
+        {
+            "code": "3.4.2",
+            "description": "Plan and deliver teaching strategies that are responsive to the special educational needs of learners in difficult circumstances, including: geographic isolation; chronic illness; displacement due to armed conflict, urban resettlement or disasters; child abuse and child labor practices",
+        },
+    ],
+}
 
-# --------------------------------------------------
-# AUTHENTICATION & LICENSE CHECK
-# --------------------------------------------------
-if not st.session_state["authenticated"]:
-    st.title("DepEd ILAW Generator with COT Indicators")
-    st.write("Enter your email address, personal Gemini API key, and License Key to start generating DepEd Order No. 003 lesson plans.")
 
-    with st.form("auth_form"):
-        email = st.text_input("Enter Email Address:", value="cherbbinondzo@gmail.com")
-        api_key = st.text_input("Enter Your Gemini API Key:", type="password")
-        license_key = st.text_input("Enter License Key:", type="password")
-        submit_btn = st.form_submit_button("Continue to Dashboard")
+# ==============================================================================
+# HELPER FUNCTIONS
+# ==============================================================================
 
-    if submit_btn:
-        if not api_key:
-            st.error("Please enter a valid Gemini API Key.")
-        elif not license_key:
-            st.error("Please enter a valid License Key.")
-        else:
-            try:
-                genai.configure(api_key=api_key)
-                st.session_state["api_key"] = api_key
-                st.session_state["license_key"] = license_key
-                st.session_state["user_email"] = email
-                st.session_state["authenticated"] = True
-                st.success("Successfully authenticated!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Authentication failed: {e}")
 
-else:
-    # --------------------------------------------------
-    # MAIN DASHBOARD & COT INDICATORS WORKSPACE
-    # --------------------------------------------------
-    st.sidebar.title("Navigation")
-    st.sidebar.write(f"Logged in as: **{st.session_state.get('user_email')}**")
-    st.sidebar.write(f"License Status: **Active**")
-    
-    if st.sidebar.button("Log Out"):
-        st.session_state["authenticated"] = False
-        st.rerun()
+def get_career_stage_by_position(position_name):
+    """Finds the stage config matching a given teacher position name."""
+    clean_position = position_name.strip().title()
+    for key, stage in CAREER_STAGES.items():
+        if clean_position in [p.title() for p in stage["positions"]]:
+            return stage
+    return None
 
-    st.title("📘 DepEd ILAW Lesson Plan Generator")
-    st.caption("Aligned with DepEd Order No. 003 & Classroom Observation Tool (COT) Indicators")
 
-    col1, col2 = st.columns([1, 1])
+# ==============================================================================
+# API ENDPOINTS
+# ==============================================================================
 
-    with col1:
-        st.subheader("Lesson Details")
-        grade_level = st.selectbox("Grade Level:", ["Grade 7", "Grade 8", "Grade 9", "Grade 10"])
-        subject = st.text_input("Learning Area / Subject:", value="Mathematics")
-        quarter = st.selectbox("Quarter:", ["Quarter 1", "Quarter 2", "Quarter 3", "Quarter 4"])
-        topic = st.text_input("Lesson Topic / Most Essential Learning Competency (MELC):", value="Quadrilaterals and Parallelograms")
 
-    with col2:
-        st.subheader("COT Indicators Alignment")
-        cot_1 = st.checkbox("COT 1: Apply knowledge of content within and across curriculum teaching areas.", value=True)
-        cot_2 = st.checkbox("COT 2: Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills.", value=True)
-        cot_3 = st.checkbox("COT 3: Apply a range of teaching strategies to develop critical and creative thinking, as well as other higher-order thinking skills.", value=True)
-        cot_4 = st.checkbox("COT 4: Display proficient use of Mother Tongue, Filipino and English to facilitate teaching and learning.", value=True)
-        cot_5 = st.checkbox("COT 5: Establish safe and secure learning environments to enhance learning through the consistent implementation of policies.", value=True)
+@app.route("/", methods=["GET"])
+def home():
+    """Root route providing system metadata and available API endpoints."""
+    return jsonify(
+        {
+            "system": "Classroom Observation Tool (COT) Management API",
+            "endpoints": {
+                "get_career_stages": "/api/career-stages [GET]",
+                "get_indicators": "/api/indicators/<school_year> [GET]",
+                "evaluate_rating": "/api/evaluate-rating [POST]",
+            },
+        }
+    )
 
-    st.divider()
 
-    if st.button("🚀 Generate DepEd Order No. 003 Lesson Plan", type="primary"):
-        with st.spinner("Generating lesson plan with embedded COT indicators via Gemini AI..."):
-            try:
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                
-                selected_cots = []
-                if cot_1: selected_cots.append("COT Indicator 1 (Content Integration)")
-                if cot_2: selected_cots.append("COT Indicator 2 (Literacy & Numeracy)")
-                if cot_3: selected_cots.append("COT Indicator 3 (Critical & Creative Thinking / HOTS)")
-                if cot_4: selected_cots.append("COT Indicator 4 (Language Proficiency)")
-                if cot_5: selected_cots.append("COT Indicator 5 (Safe & Secure Environment)")
+@app.route("/api/career-stages", methods=["GET"])
+def list_career_stages():
+    """Returns rating scales and target positions across all career stages."""
+    return jsonify({"status": "success", "data": CAREER_STAGES})
 
-                prompt = f"""
-                Generate a complete DepEd Order No. 003 Daily Lesson Log (DLL) / Daily Lesson Plan (DLP) for:
-                - Grade Level: {grade_level}
-                - Subject: {subject}
-                - Quarter: {quarter}
-                - Topic: {topic}
-                
-                Ensure the following Classroom Observation Tool (COT) indicators are explicitly highlighted and integrated into the procedures:
-                {', '.join(selected_cots)}
 
-                Structure the lesson plan with the standard ILAW / DepEd components:
-                I. Objectives
-                II. Content
-                III. Learning Resources
-                IV. Procedures (Explicitly tag COT indicators in bold where applied)
-                V. Remarks & Reflection
-                """
+@app.route("/api/indicators/<school_year>", methods=["GET"])
+def get_indicators(school_year):
+    """Returns the COT indicators matrix for a specific School Year (e.g., '2025-2026')."""
+    indicators = COT_INDICATORS_BY_SY.get(school_year)
+    if not indicators:
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": f"School year '{school_year}' not found. Valid options: {list(COT_INDICATORS_BY_SY.keys())}",
+                }
+            ),
+            404,
+        )
 
-                response = model.generate_content(prompt)
-                
-                st.subheader("Generated Lesson Plan")
-                st.markdown(response.text)
-                st.success("Lesson plan generated successfully!")
+    return jsonify(
+        {
+            "status": "success",
+            "school_year": school_year,
+            "total_indicators": len(indicators),
+            "indicators": indicators,
+        }
+    )
 
-            except Exception as e:
-                st.error(f"Error generating lesson plan: {e}")
+
+@app.route("/api/evaluate-rating", methods=["POST"])
+def evaluate_rating():
+    """Evaluates an observation score for a specific position and indicator status."""
+    payload = request.get_json() or {}
+    position = payload.get("position")
+    is_observed = payload.get("is_observed", True)
+    given_score = payload.get("score")
+
+    if not position:
+        return (
+            jsonify({"status": "error", "message": "Position is required."}),
+            400,
+        )
+
+    stage_info = get_career_stage_by_position(position)
+    if not stage_info:
+        return (
+            jsonify(
+                {
+                    "status": "error",
+                    "message": f"Invalid position '{position}'.",
+                }
+            ),
+            400,
+        )
+
+    if not is_observed:
+        final_score = stage_info["default_not_observed"]
+        note = f"Not Observed (NO) selected. Defaulted to minimum score level {final_score} for {stage_info['title']}."
+    else:
+        if (
+            given_score is None
+            or given_score < stage_info["scale_min"]
+            or given_score > stage_info["scale_max"]
+        ):
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Invalid score {given_score}. Valid rating scale for {position} ({stage_info['title']}) is {stage_info['scale_min']} to {stage_info['scale_max']}.",
+                    }
+                ),
+                400,
+            )
+        final_score = given_score
+        note = "Score accepted within standard scale bounds."
+
+    return jsonify(
+        {
+            "status": "success",
+            "position": position,
+            "career_stage": stage_info["title"],
+            "scale_range": f"{stage_info['scale_min']} - {stage_info['scale_max']}",
+            "final_score": final_score,
+            "note": note,
+        }
+    )
+
+
+# ==============================================================================
+# SERVER ENTRY POINT
+# ==============================================================================
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=5000)
