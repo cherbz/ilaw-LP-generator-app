@@ -75,7 +75,12 @@ db = init_firebase()
 # 3. HELPER FUNCTIONS & CLEANING
 # ==========================================
 def clean_latex_math(text: str) -> str:
-    """Removes math dollar signs ($or$$) and LaTeX slashes to keep plain text formatting."""     if not isinstance(text, str):         return text     # Strip dollar signs     cleaned = text.replace("$$", "").replace("$", "")
+    """Removes math dollar signs ($ or $$) and LaTeX slashes to keep plain text formatting."""
+    if not isinstance(text, str):
+        return text
+    
+    # Strip dollar signs
+    cleaned = text.replace("$$", "").replace("$", "")
     # Clean common LaTeX math symbols
     cleaned = cleaned.replace("\\f", "f").replace("\\[", "").replace("\\]", "").replace("\\(", "").replace("\\)", "")
     return cleaned
@@ -386,7 +391,8 @@ if st.button("🚀 Generate Semi-Detailed Lesson Plan", type="primary", use_cont
 
                     # Clean dollar signs across all dictionary entries
                     for k in ilaw_data:
-                        ilaw_data[k] = clean_latex_math(ilaw_data[k])
+                        if isinstance(ilaw_data[k], str):
+                            ilaw_data[k] = clean_latex_math(ilaw_data[k])
 
                     st.markdown("---")
                     st.subheader("📋 Generated Semi-Detailed DepEd ILAW Lesson Plan (DO No. 003, s. 2026)")
