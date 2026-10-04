@@ -1,6 +1,7 @@
 import os
 import json
 import io
+import re
 import streamlit as st
 import google.generativeai as genai
 import firebase_admin
@@ -71,8 +72,14 @@ def init_firebase():
 db = init_firebase()
 
 # ==========================================
-# 3. HELPER FUNCTIONS & DYNAMIC MODEL DISCOVERY
+# 3. HELPER FUNCTIONS & CLEANING
 # ==========================================
+def clean_latex_math(text: str) -> str:
+    """Removes math dollar signs ($or$$) and LaTeX slashes to keep plain text formatting."""     if not isinstance(text, str):         return text     # Strip dollar signs     cleaned = text.replace("$$", "").replace("$", "")
+    # Clean common LaTeX math symbols
+    cleaned = cleaned.replace("\\f", "f").replace("\\[", "").replace("\\]", "").replace("\\(", "").replace("\\)", "")
+    return cleaned
+
 def validate_and_claim_license(license_key: str, email: str) -> tuple[bool, str]:
     if not license_key or not email:
         return False, "Please provide both a valid License Key and Email address."
@@ -98,12 +105,9 @@ def validate_and_claim_license(license_key: str, email: str) -> tuple[bool, str]
     return True, "License key successfully activated!"
 
 def generate_lesson_plan_content(api_key: str, prompt: str) -> str:
-    """Dynamically queries available models for the user's key to ensure compatibility across model updates."""
     genai.configure(api_key=api_key.strip())
     
     candidate_models = []
-    
-    # 1. Dynamically discover valid content generation models from user's API key
     try:
         all_models = list(genai.list_models())
         supported_models = [
@@ -112,21 +116,18 @@ def generate_lesson_plan_content(api_key: str, prompt: str) -> str:
             if "generateContent" in m.supported_generation_methods
         ]
         
-        # Prioritize flash / pro general models
         flash_models = [m for m in supported_models if "flash" in m]
         pro_models = [m for m in supported_models if "pro" in m]
         other_models = [m for m in supported_models if m not in flash_models and m not in pro_models]
         
         candidate_models = flash_models + pro_models + other_models
     except Exception:
-        # Fallback list if model listing fails
         candidate_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"]
 
     if not candidate_models:
         candidate_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"]
 
     last_error = None
-    # 2. Iterate through candidate models until one succeeds
     for model_name in candidate_models:
         try:
             model = genai.GenerativeModel(model_name)
@@ -140,11 +141,10 @@ def generate_lesson_plan_content(api_key: str, prompt: str) -> str:
     raise Exception(f"Unable to generate content with provided key. Attempted models: {candidate_models}. Last error: {str(last_error)}")
 
 def create_docx_ilaw_template(data_dict: dict) -> io.BytesIO:
-    """Generates a structured DepEd Order No. 003, s. 2026 ILAW Word Document."""
+    """Generates a structured DepEd Order No. 003, s. 2026 Semi-Detailed ILAW Word Document."""
     doc = Document()
 
-    sections = doc.sections
-    for section in sections:
+    for section in doc.sections:
         section.top_margin = Inches(0.75)
         section.bottom_margin = Inches(0.75)
         section.left_margin = Inches(0.75)
@@ -152,7 +152,7 @@ def create_docx_ilaw_template(data_dict: dict) -> io.BytesIO:
 
     p_title = doc.add_paragraph()
     p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run_title = p_title.add_run(f"ILAW LESSON PLAN ON {data_dict.get('learning_area', 'MATHEMATICS').upper()}")
+    run_title = p_title.add_run(f"SEMI-DETAILED ILAW LESSON PLAN ON {clean_latex_math(data_dict.get('learning_area', 'MATHEMATICS')).upper()}")
     run_title.bold = True
     run_title.font.size = Pt(14)
     run_title.font.name = "Arial"
@@ -168,10 +168,10 @@ def create_docx_ilaw_template(data_dict: dict) -> io.BytesIO:
     meta_table.autofit = False
     
     meta_data = [
-        ("Name of Lesson", data_dict.get("lesson_name", "")),
-        ("Learning Area/s", data_dict.get("learning_area", "")),
-        ("Designed by Teacher/s", data_dict.get("teacher_name", "")),
-        ("Grade Level & Section", f"{data_dict.get('grade_level', '')} - {data_dict.get('section', 'Kindness')}"),
+        ("Name of Lesson", clean_latex_math(data_dict.get("lesson_name", ""))),
+        ("Learning Area/s", clean_latex_math(data_dict.get("learning_area", ""))),
+        ("Designed by Teacher/s", clean_latex_math(data_dict.get("teacher_name", ""))),
+        ("Grade Level & Section", f"{clean_latex_math(data_dict.get('grade_level', ''))} - {clean_latex_math(data_dict.get('section', 'Kindness'))}"),
         ("No. of Sessions", "1"),
         ("References", "DepEd Curriculum Guide & Presentation Slides")
     ]
@@ -194,23 +194,23 @@ def create_docx_ilaw_template(data_dict: dict) -> io.BytesIO:
 
     ilaw_sections = [
         ("1. INTENTIONS", [
-            ("Learning Competency", data_dict.get("competency", "")),
-            ("Learning Objectives", data_dict.get("objectives", "")),
-            ("Learner Context", data_dict.get("learner_context", ""))
+            ("Learning Competency", clean_latex_math(data_dict.get("competency", ""))),
+            ("Learning Objectives", clean_latex_math(data_dict.get("objectives", ""))),
+            ("Learner Context", clean_latex_math(data_dict.get("learner_context", "")))
         ]),
         ("2. LEARNING EXPERIENCE", [
-            ("Pre-Lesson (Getting Ready)", data_dict.get("pre_lesson", "")),
-            ("Instructional Flow & Direct Modeling", data_dict.get("direct_modeling", "")),
-            ("Collaborative Group Activity", data_dict.get("group_activity", "")),
-            ("Synthesis & Resources", data_dict.get("synthesis", "")),
-            ("Opportunities for Integration", data_dict.get("integration", ""))
+            ("Pre-Lesson (Getting Ready)", clean_latex_math(data_dict.get("pre_lesson", ""))),
+            ("Instructional Flow & Direct Modeling", clean_latex_math(data_dict.get("direct_modeling", ""))),
+            ("Collaborative Group Activity", clean_latex_math(data_dict.get("group_activity", ""))),
+            ("Synthesis & Resources", clean_latex_math(data_dict.get("synthesis", ""))),
+            ("Opportunities for Integration", clean_latex_math(data_dict.get("integration", "")))
         ]),
         ("3. ASSESSMENT", [
-            ("Formative Assessment (Individual Evaluation)", data_dict.get("assessment", ""))
+            ("Formative Assessment (Individual Evaluation)", clean_latex_math(data_dict.get("assessment", "")))
         ]),
         ("4. WAYS FORWARD", [
-            ("Extended Learning Opportunities", data_dict.get("extended_learning", "")),
-            ("Teacher Reflections", data_dict.get("reflections", ""))
+            ("Extended Learning Opportunities", clean_latex_math(data_dict.get("extended_learning", ""))),
+            ("Teacher Reflections", clean_latex_math(data_dict.get("reflections", "")))
         ])
     ]
 
@@ -263,7 +263,7 @@ st.sidebar.caption("COT Scale: 2 to 6")
 # ==========================================
 # 5. MAIN APP UI & INPUTS
 # ==========================================
-st.title("💡 Binonz ILAW Lesson Plan Generator")
+st.title("💡 Binonz Semi-Detailed ILAW Lesson Plan Generator")
 
 # --- SECTION 1: BASIC INFORMATION ---
 st.subheader("1. Basic Information & Meta Details")
@@ -317,7 +317,7 @@ learner_context = st.text_area(
 # ==========================================
 # 6. GENERATION ACTION
 # ==========================================
-if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=True):
+if st.button("🚀 Generate Semi-Detailed Lesson Plan", type="primary", use_container_width=True):
     if not license_key_input or not email_input or not api_key_input:
         st.error("Please fill in your License Key, Registered Email, and Gemini API Key in the sidebar before proceeding.")
     else:
@@ -328,21 +328,25 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
             st.error(f"License Error: {msg}")
         else:
             st.success(msg)
-            with st.spinner("Discovering active Gemini model & generating DepEd ILAW Lesson Plan..."):
+            with st.spinner("Generating Semi-Detailed DepEd ILAW Lesson Plan (DO No. 003, s. 2026)..."):
                 
                 selected_cots = []
-                if cot1: selected_cots.append("[COT INDICATOR: 1.1.2: Apply knowledge of content within and across curriculum teaching areas.]")
-                if cot2: selected_cots.append("[COT INDICATOR: 1.4.2: Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills.]")
-                if cot3: selected_cots.append("[COT INDICATOR: 1.5.2: Apply a range of teaching strategies to develop critical and creative thinking.]")
-                if cot4: selected_cots.append("[COT INDICATOR: 4.5.2: Select, develop, organize, and use appropriate teaching and learning resources, including ICT.]")
-                if cot5: selected_cots.append("[COT INDICATOR: 2.3.2: Manage classroom structure to engage learners in meaningful exploration, discovery and hands-on activities.]")
-                if cot6: selected_cots.append("[COT INDICATOR: 3.1.2: Use differentiated, developmentally appropriate learning experiences.]")
-                if cot7: selected_cots.append("[COT INDICATOR: 5.1.2: Design, select, organize and use diagnostic, formative and summative assessment strategies.]")
-                if cot8: selected_cots.append("[COT INDICATOR: 5.2.2: Monitor and evaluate learner progress and achievement using learner attainment data.]")
+                if cot1: selected_cots.append("📌 [COT INDICATOR: 1.1.2: Apply knowledge of content within and across curriculum teaching areas.]")
+                if cot2: selected_cots.append("📌 [COT INDICATOR: 1.4.2: Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills.]")
+                if cot3: selected_cots.append("📌 [COT INDICATOR: 1.5.2: Apply a range of teaching strategies to develop critical and creative thinking.]")
+                if cot4: selected_cots.append("📌 [COT INDICATOR: 4.5.2: Select, develop, organize, and use appropriate teaching and learning resources, including ICT.]")
+                if cot5: selected_cots.append("📌 [COT INDICATOR: 2.3.2: Manage classroom structure to engage learners in meaningful exploration, discovery and hands-on activities.]")
+                if cot6: selected_cots.append("📌 [COT INDICATOR: 3.1.2: Use differentiated, developmentally appropriate learning experiences.]")
+                if cot7: selected_cots.append("📌 [COT INDICATOR: 5.1.2: Design, select, organize and use diagnostic, formative and summative assessment strategies.]")
+                if cot8: selected_cots.append("📌 [COT INDICATOR: 5.2.2: Monitor and evaluate learner progress and achievement using learner attainment data.]")
 
                 prompt = f"""
-                You are a DepEd Curriculum Specialist. Generate a strict DepEd Order No. 003, s. 2026 (Annex A) ILAW Lesson Plan.
-                Return ONLY a valid JSON object matching this schema without markdown codeblocks:
+                You are a DepEd Curriculum Specialist. Generate a comprehensive SEMI-DETAILED DepEd Order No. 003, s. 2026 (Annex A) ILAW Lesson Plan.
+
+                CRITICAL FORMAT RULES:
+                1. DO NOT USE ANY DOLLAR SIGNS ($) OR LATEX FORMATTING anywhere in the response. Write mathematical expressions using plain text (e.g., f(x) = 2x + 1, y = 3x - 4).
+                2. Write a SEMI-DETAILED lesson plan format (provide complete step-by-step procedures, teacher actions, student responses, and clear activity instructions in every section).
+                3. Return ONLY a valid JSON object matching this schema without markdown codeblocks:
 
                 {{
                   "lesson_name": "{lesson_name}",
@@ -351,16 +355,16 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                   "grade_level": "{grade_level}",
                   "section": "{section_name}",
                   "competency": "{learning_competency}",
-                  "objectives": "3 specific objectives with embedded COT tag like 📌 [COT INDICATOR: 1.4.2...]",
-                  "learner_context": "{learner_context} with embedded COT tag like 📌 [COT INDICATOR: 3.1.2...]",
-                  "pre_lesson": "Pre-lesson details with embedded COT tags",
-                  "direct_modeling": "Instructional flow and modeling with embedded COT tags",
-                  "group_activity": "Collaborative group activity with embedded COT tags",
-                  "synthesis": "Synthesis questions with embedded COT tags",
-                  "integration": "Cross-curricular linkages with embedded COT tags",
-                  "assessment": "Formative evaluation details with embedded COT tags",
-                  "extended_learning": "Home assignment/challenge details",
-                  "reflections": "Teacher reflections"
+                  "objectives": "1. Cognitive objective... 2. Psychomotor objective... 3. Affective objective... 📌 [COT INDICATOR: 1.4.2: ...]",
+                  "learner_context": "Semi-detailed learner context description 📌 [COT INDICATOR: 3.1.2: ...]",
+                  "pre_lesson": "Semi-detailed preliminary activity: 1. Drill/Warm-up, 2. Review, 3. Motivation with teacher and student tasks 📌 [COT INDICATOR: ...]",
+                  "direct_modeling": "Semi-detailed direct modeling step-by-step: Example 1, Example 2 with plain text math formulas and teacher explanations 📌 [COT INDICATOR: ...]",
+                  "group_activity": "Semi-detailed collaborative group activity instructions for Group 1, Group 2, Group 3, and Group 4 📌 [COT INDICATOR: ...]",
+                  "synthesis": "Semi-detailed discussion, debrief questions, and key takeaways 📌 [COT INDICATOR: ...]",
+                  "integration": "Semi-detailed cross-curricular integration (e.g., Science, Economics, Health) 📌 [COT INDICATOR: ...]",
+                  "assessment": "Semi-detailed evaluation items and scoring guide 📌 [COT INDICATOR: ...]",
+                  "extended_learning": "Detailed assignment/enrichment activity",
+                  "reflections": "Teacher reflections and next steps"
                 }}
 
                 Target COT Indicators to embed inline:
@@ -380,10 +384,14 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                     
                     ilaw_data = json.loads(clean_json.strip())
 
-                    st.markdown("---")
-                    st.subheader("📋 Generated DepEd ILAW Lesson Plan (DO No. 003, s. 2026)")
+                    # Clean dollar signs across all dictionary entries
+                    for k in ilaw_data:
+                        ilaw_data[k] = clean_latex_math(ilaw_data[k])
 
-                    st.markdown(f"### ILAW LESSON PLAN ON {ilaw_data.get('learning_area', 'MATHEMATICS').upper()}")
+                    st.markdown("---")
+                    st.subheader("📋 Generated Semi-Detailed DepEd ILAW Lesson Plan (DO No. 003, s. 2026)")
+
+                    st.markdown(f"### SEMI-DETAILED ILAW LESSON PLAN ON {ilaw_data.get('learning_area', 'MATHEMATICS').upper()}")
                     st.caption("DepEd Order No. 003, s. 2026 (Annex A Template) | COT Indicators Embedded")
 
                     st.markdown("#### 1. INTENTIONS")
@@ -409,9 +417,9 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
 
                     st.markdown("---")
                     st.download_button(
-                        label="📄 Download Microsoft Word File (.docx)",
+                        label="📄 Download Semi-Detailed Word File (.docx)",
                         data=docx_file,
-                        file_name=f"ILAW_Lesson_Plan_{lesson_name.replace(' ', '_')}.docx",
+                        file_name=f"Semi_Detailed_ILAW_Lesson_Plan_{lesson_name.replace(' ', '_')}.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         type="primary"
                     )
