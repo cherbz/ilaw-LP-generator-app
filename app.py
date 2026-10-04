@@ -46,7 +46,7 @@ COT_INDICATORS_BY_SY = {
         ),
         (
             "3.1.2",
-            "Use differentiated, developmentally appropriate learning experiences to address learners’ gender, needs, strengths, interests and experiences",
+            "Use differentiated, developmentally appropriate learning experiences to address learners' gender, needs, strengths, interests and experiences",
         ),
         (
             "4.1.2",
@@ -88,7 +88,7 @@ COT_INDICATORS_BY_SY = {
         ),
         (
             "3.2.2",
-            "Establish a learner-centered culture by using teaching strategies that respond to learners’ linguistic, cultural, socio-economic and religious backgrounds",
+            "Establish a learner-centered culture by using teaching strategies that respond to learners' linguistic, cultural, socio-economic and religious backgrounds",
         ),
         (
             "3.5.2",
@@ -223,7 +223,7 @@ learning_competency = st.text_area(
 )
 
 # ------------------------------------------------------------------------------
-# GENERATION ENGINE
+# 3. GENERATION ENGINE (AUTOMATIC MODEL FALLBACK)
 # ------------------------------------------------------------------------------
 st.divider()
 
@@ -241,8 +241,15 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
             "Generating DepEd DLL and integrating COT indicators..."
         ):
             try:
-                genai.configure(api_key=api_key)
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                genai.configure(api_key=api_key.strip())
+
+                # Model candidates tried sequentially to prevent 404/API version errors
+                model_candidates = [
+                    "gemini-1.5-flash",
+                    "gemini-1.5-pro",
+                    "gemini-pro",
+                    "gemini-2.0-flash",
+                ]
 
                 cot_prompt_text = "\n".join(
                     [f"- {ind}" for ind in selected_indicators]
@@ -278,10 +285,30 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                 IV. REMARKS & REFLECTION
                 """
 
-                response = model.generate_content(prompt)
+                response = None
+                successful_model = None
+                last_error = None
+
+                for model_name in model_candidates:
+                    try:
+                        model = genai.GenerativeModel(model_name)
+                        response = model.generate_content(prompt)
+                        successful_model = model_name
+                        break
+                    except Exception as err:
+                        last_error = err
+                        continue
+
+                if response is None:
+                    raise Exception(
+                        f"Unable to generate content with provided key. Last error: {str(last_error)}"
+                    )
+
                 generated_text = response.text
 
-                st.success("Lesson Plan successfully generated!")
+                st.success(
+                    f"Lesson Plan successfully generated using model: `{successful_model}`!"
+                )
                 st.markdown(generated_text)
 
                 # Generate Word Document (.docx)
