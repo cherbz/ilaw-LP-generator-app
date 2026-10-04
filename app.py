@@ -20,31 +20,52 @@ st.set_page_config(
 # ==========================================
 @st.cache_resource
 def init_firebase():
-    """Initializes Firebase Admin SDK from Secrets, Env Vars, or local file."""
+    """Initializes Firebase Admin SDK safely across local, Streamlit, and Vercel environments."""
     if not firebase_admin._apps:
         key_dict = None
 
-        # 1. Check Streamlit Secrets (TOML / Streamlit Cloud)
+        # 1. Try reading from Streamlit Secrets (Dict or String)
         if "text_key" in st.secrets:
-            key_dict = dict(st.secrets["text_key"])
+            secrets_val = st.secrets["text_key"]
+            if isinstance(secrets_val, str):
+                try:
+                    key_dict = json.loads(secrets_val)
+                except Exception:
+                    pass
+            elif hasattr(secrets_val, "to_dict"):
+                key_dict = secrets_val.to_dict()
+            elif isinstance(secrets_val, dict):
+                key_dict = dict(secrets_val)
 
-        # 2. Check Vercel Environment Variables (JSON string)
-        elif os.getenv("text_key"):
-            key_dict = json.loads(os.getenv("text_key"))
-        elif os.getenv("FIREBASE_CREDENTIALS"):
-            key_dict = json.loads(os.getenv("FIREBASE_CREDENTIALS"))
-
-        # Initialize from dictionary if found
-        if key_dict:
-            cred = credentials.Certificate(key_dict)
-            firebase_admin.initialize_app(cred)
+        # 2. Try reading from Vercel / OS Environment Variables
+        if not key_dict:
+            env_var = os.getenv("text_key") or os.getenv("FIREBASE_CREDENTIALS") or os.getenv("FIREBASE_SERVICE_ACCOUNT")
+            if env_var:
+                try:
+                    key_dict = json.loads(env_var)
+                except Exception as e:
+                    st.error(f"Failed to parse Firebase JSON from environment variable: {e}")
+                    st.stop()
 
         # 3. Fallback to local serviceAccountKey.json file
-        elif os.path.exists("serviceAccountKey.json"):
-            cred = credentials.Certificate("serviceAccountKey.json")
+        if not key_dict and os.path.exists("serviceAccountKey.json"):
+            try:
+                with open("serviceAccountKey.json", "r") as f:
+                    key_dict = json.load(f)
+            except Exception as e:
+                st.error(f"Failed to load serviceAccountKey.json: {e}")
+                st.stop()
+
+        # Initialize Firebase if credentials were found
+        if key_dict:
+            # Fix escaped newlines in private key string if present
+            if "private_key" in key_dict and isinstance(key_dict["private_key"], str):
+                key_dict["private_key"] = key_dict["private_key"].replace("\\n", "\n")
+                
+            cred = credentials.Certificate(key_dict)
             firebase_admin.initialize_app(cred)
         else:
-            st.error("Firebase credentials not found! Please check serviceAccountKey.json or Vercel Environment Variables.")
+            st.error("Firebase credentials not found! Ensure 'text_key' or 'FIREBASE_CREDENTIALS' environment variable is set in Vercel.")
             st.stop()
 
     return firestore.client()
@@ -100,7 +121,7 @@ def generate_lesson_plan_content(api_key: str, prompt: str) -> str:
     except Exception:
         pass
 
-    # 2. Hardcoded fallbacks in case list_models isn't permitted by API key scope
+    # 2. Fallbacks in case list_models isn't permitted by key scope
     fallback_models = [
         "gemini-2.5-flash",
         "gemini-2.0-flash",
@@ -108,7 +129,6 @@ def generate_lesson_plan_content(api_key: str, prompt: str) -> str:
         "gemini-1.5-pro"
     ]
 
-    # Combine lists while maintaining order and removing duplicates
     candidate_models = list(dict.fromkeys(preferred_models + fallback_models))
 
     last_error = None
