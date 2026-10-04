@@ -1,7 +1,9 @@
 import io
+import re
 import docx
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_COLOR_INDEX
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
@@ -222,8 +224,20 @@ learner_context = st.text_area(
 )
 
 # ==============================================================================
-# 3. HELPER FUNCTION TO BUILD FORMATTED DOCX (DEPED ORDER 003, S. 2026 ANNEX A)
+# 3. HELPER FUNCTIONS TO CLEAN MATH & BUILD DOCX
 # ==============================================================================
+
+
+def clean_math_syntax(text: str) -> str:
+    """Removes LaTeX dollar signs ($) and cleans math formatting."""
+    cleaned = re.sub(r"\$+", "", text)
+    cleaned = (
+        cleaned.replace("\\", "")
+        .replace("angle", "∠")
+        .replace("circ", "°")
+        .replace("&", "&")
+    )
+    return cleaned
 
 
 def set_cell_background(cell, hex_color):
@@ -238,9 +252,8 @@ def set_cell_background(cell, hex_color):
 def build_deped_ilaw_docx(header_data, content_dict):
     doc = docx.Document()
 
-    # Page Margins
-    sections = doc.sections
-    for s in sections:
+    # Set page margins
+    for s in doc.sections:
         s.top_margin = Inches(0.8)
         s.bottom_margin = Inches(0.8)
         s.left_margin = Inches(0.8)
@@ -250,7 +263,7 @@ def build_deped_ilaw_docx(header_data, content_dict):
     p_title = doc.add_paragraph()
     p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_title = p_title.add_run(
-        f"ILAW LESSON PLAN ON {header_data['subject'].upper()}\n"
+        f"ILAW LESSON PLAN ON {clean_math_syntax(header_data['subject']).upper()}\n"
     )
     run_title.bold = True
     run_title.font.size = Pt(16)
@@ -269,12 +282,12 @@ def build_deped_ilaw_docx(header_data, content_dict):
     meta_table = doc.add_table(rows=6, cols=2)
     meta_table.alignment = WD_TABLE_ALIGNMENT.CENTER
     meta_data = [
-        ("Name of Lesson", header_data["topic"]),
-        ("Learning Area/s", header_data["subject"]),
-        ("Designed by Teacher/s", header_data["teacher"]),
-        ("Grade Level & Section", header_data["grade"]),
-        ("No. of Sessions", header_data["sessions"]),
-        ("References", header_data["references"]),
+        ("Name of Lesson", clean_math_syntax(header_data["topic"])),
+        ("Learning Area/s", clean_math_syntax(header_data["subject"])),
+        ("Designed by Teacher/s", clean_math_syntax(header_data["teacher"])),
+        ("Grade Level & Section", clean_math_syntax(header_data["grade"])),
+        ("No. of Sessions", clean_math_syntax(header_data["sessions"])),
+        ("References", clean_math_syntax(header_data["references"])),
     ]
 
     for idx, (label, val) in enumerate(meta_data):
@@ -289,14 +302,16 @@ def build_deped_ilaw_docx(header_data, content_dict):
         r_lbl = p_lbl.add_run(label)
         r_lbl.bold = True
         r_lbl.font.size = Pt(10)
+        r_lbl.font.color.rgb = RGBColor(0, 0, 0)
 
         p_val = cell_val.paragraphs[0]
         r_val = p_val.add_run(val)
         r_val.font.size = Pt(10)
+        r_val.font.color.rgb = RGBColor(0, 0, 0)
 
     doc.add_paragraph()
 
-    # Helper for rendering section tables
+    # Section Table Helper
     def add_section_table(section_title, rows_data):
         h_p = doc.add_paragraph()
         h_run = h_p.add_run(section_title)
@@ -319,19 +334,29 @@ def build_deped_ilaw_docx(header_data, content_dict):
             r1 = p1.add_run(lbl)
             r1.bold = True
             r1.font.size = Pt(10)
+            r1.font.color.rgb = RGBColor(0, 0, 0)
 
             p2 = c_val.paragraphs[0]
-            lines = text_content.strip().split("\n")
-            for l_idx, line in enumerate(lines):
-                if l_idx > 0:
-                    p2 = c_val.add_paragraph()
-                if "📌 [COT INDICATOR" in line:
-                    r2 = p2.add_run(line)
-                    r2.bold = True
-                    r2.font.color.rgb = RGBColor(180, 40, 0)
+            clean_text = clean_math_syntax(text_content.strip())
+
+            # Split content to highlight COT indicators accurately
+            segments = re.split(r"(📌\s*\[COT INDICATOR:[^\]]+\])", clean_text)
+
+            for seg in segments:
+                if not seg:
+                    continue
+                if seg.startswith("📌") or "[COT INDICATOR" in seg:
+                    r_cot = p2.add_run(f" {seg.strip()} ")
+                    r_cot.bold = True
+                    r_cot.font.size = Pt(10)
+                    r_cot.font.color.rgb = RGBColor(0, 0, 0)
+                    r_cot.font.highlight_color = (
+                        WD_COLOR_INDEX.YELLOW  # Yellow Highlighting
+                    )
                 else:
-                    r2 = p2.add_run(line)
-                r2.font.size = Pt(10)
+                    r_norm = p2.add_run(seg)
+                    r_norm.font.size = Pt(10)
+                    r_norm.font.color.rgb = RGBColor(0, 0, 0)  # Pure Black Text
 
         doc.add_paragraph()
 
@@ -402,7 +427,7 @@ def build_deped_ilaw_docx(header_data, content_dict):
 
 
 # ==============================================================================
-# 4. GENERATION ENGINE (DEPED ORDER 003, S. 2026 ANNEX A PARSER)
+# 4. GENERATION ENGINE
 # ==============================================================================
 
 st.divider()
@@ -433,6 +458,10 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                 prompt = f"""
                 You are an expert DepEd Instructional Designer. Create an official DepEd ILAW Lesson Plan adhering strictly to DepEd Order No. 003, s. 2026 (Annex A Template).
 
+                CRITICAL FORMATTING RULES:
+                1. DO NOT use LaTeX syntax or dollar signs ($) for mathematical formulas, functions, or variables. Write math in clean plain text (e.g., write 'f(x) = mx + b' instead of '$f(x) = mx + b$').
+                2. Output text in standard, professional tone.
+
                 HEADER DETAILS:
                 - Teacher: {teacher_name} ({position_rank} - Stage: {stage_info['stage']})
                 - Grade & Section: {grade_level} | Learning Area: {subject}
@@ -447,16 +476,16 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                 TARGET COT INDICATORS TO EMBED:
                 {cot_prompt_text if cot_prompt_text else "Apply standard pedagogical strategies."}
 
-                CRITICAL INSTRUCTION: Output EXACTLY in this key-value header structure (use ':::' as delimiter) so it can be parsed into tables:
+                STRUCTURE OUTPUT (use ':::' as delimiter):
 
                 ###1. INTENTIONS###
                 Learning Competency::: {learning_competency}
-                Learning Objectives::: [Provide 3 SMART objectives. Embed selected COT indicators directly at the end using format: 📌 [COT INDICATOR: code: description]]
+                Learning Objectives::: [Provide 3 SMART objectives. Embed selected COT indicators using format: 📌 [COT INDICATOR: code: description]]
                 Learner Context::: {learner_context} [Embed relevant COT indicators using 📌 [COT INDICATOR: ...]]
 
                 ###2. LEARNING EXPERIENCE###
-                Pre-Lesson::: [Detail warmup/hook. Embed COT indicators using 📌 [COT INDICATOR: ...]]
-                Instructional Flow::: [Detail direct instruction and ICT usage. Embed COT indicators using 📌 [COT INDICATOR: ...]]
+                Pre-Lesson::: [Detail warmup. Embed COT indicators using 📌 [COT INDICATOR: ...]]
+                Instructional Flow::: [Detail direct instruction and ICT usage without dollar signs. Embed COT indicators using 📌 [COT INDICATOR: ...]]
                 Collaborative Group Activity::: [Detail differentiated group tasks. Embed COT indicators using 📌 [COT INDICATOR: ...]]
                 Synthesis & Resources::: [Detail debrief questions. Embed COT indicators using 📌 [COT INDICATOR: ...]]
                 Opportunities for Integration::: [Detail cross-curricular linkages. Embed COT indicators using 📌 [COT INDICATOR: ...]]
@@ -488,9 +517,9 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                         f"Unable to generate content with provided key. Last error: {str(last_error)}"
                     )
 
-                raw_text = response.text
+                raw_text = clean_math_syntax(response.text)
 
-                # Parsing raw text into structured key-value dict
+                # Parse into dictionary
                 parsed_content = {}
                 for line in raw_text.split("\n"):
                     if ":::" in line:
@@ -512,7 +541,7 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                     f"Official DepEd ILAW Lesson Plan generated using model: `{successful_model}`!"
                 )
 
-                # Render preview in Streamlit UI
+                # Render Streamlit UI preview
                 st.markdown(
                     f"### ILAW LESSON PLAN ON {subject.upper()}\n*DepEd Order No. 003, s. 2026 (Annex A)*"
                 )
