@@ -2,8 +2,7 @@ import io
 import re
 import docx
 from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.text import WD_COLOR_INDEX
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
@@ -252,7 +251,7 @@ def set_cell_background(cell, hex_color):
 def build_deped_ilaw_docx(header_data, content_dict):
     doc = docx.Document()
 
-    # Set page margins
+    # Margins
     for s in doc.sections:
         s.top_margin = Inches(0.8)
         s.bottom_margin = Inches(0.8)
@@ -278,7 +277,7 @@ def build_deped_ilaw_docx(header_data, content_dict):
 
     doc.add_paragraph()
 
-    # Meta Header Table
+    # Meta Table
     meta_table = doc.add_table(rows=6, cols=2)
     meta_table.alignment = WD_TABLE_ALIGNMENT.CENTER
     meta_data = [
@@ -311,7 +310,7 @@ def build_deped_ilaw_docx(header_data, content_dict):
 
     doc.add_paragraph()
 
-    # Section Table Helper
+    # Helper for Section Tables
     def add_section_table(section_title, rows_data):
         h_p = doc.add_paragraph()
         h_run = h_p.add_run(section_title)
@@ -339,24 +338,27 @@ def build_deped_ilaw_docx(header_data, content_dict):
             p2 = c_val.paragraphs[0]
             clean_text = clean_math_syntax(text_content.strip())
 
-            # Split content to highlight COT indicators accurately
-            segments = re.split(r"(📌\s*\[COT INDICATOR:[^\]]+\])", clean_text)
+            lines = clean_text.split("\n")
+            for l_idx, line in enumerate(lines):
+                if l_idx > 0:
+                    p2 = c_val.add_paragraph()
 
-            for seg in segments:
-                if not seg:
-                    continue
-                if seg.startswith("📌") or "[COT INDICATOR" in seg:
-                    r_cot = p2.add_run(f" {seg.strip()} ")
-                    r_cot.bold = True
-                    r_cot.font.size = Pt(10)
-                    r_cot.font.color.rgb = RGBColor(0, 0, 0)
-                    r_cot.font.highlight_color = (
-                        WD_COLOR_INDEX.YELLOW  # Yellow Highlighting
-                    )
-                else:
-                    r_norm = p2.add_run(seg)
-                    r_norm.font.size = Pt(10)
-                    r_norm.font.color.rgb = RGBColor(0, 0, 0)  # Pure Black Text
+                segments = re.split(
+                    r"(📌\s*\[COT INDICATOR:[^\]]+\])", line
+                )
+                for seg in segments:
+                    if not seg:
+                        continue
+                    if seg.startswith("📌") or "[COT INDICATOR" in seg:
+                        r_cot = p2.add_run(f" {seg.strip()} ")
+                        r_cot.bold = True
+                        r_cot.font.size = Pt(10)
+                        r_cot.font.color.rgb = RGBColor(0, 0, 0)
+                        r_cot.font.highlight_color = WD_COLOR_INDEX.YELLOW
+                    else:
+                        r_norm = p2.add_run(seg)
+                        r_norm.font.size = Pt(10)
+                        r_norm.font.color.rgb = RGBColor(0, 0, 0)
 
         doc.add_paragraph()
 
@@ -427,7 +429,7 @@ def build_deped_ilaw_docx(header_data, content_dict):
 
 
 # ==============================================================================
-# 4. GENERATION ENGINE
+# 4. GENERATION ENGINE (ROBUST MULTI-LINE PARSER)
 # ==============================================================================
 
 st.divider()
@@ -459,8 +461,8 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                 You are an expert DepEd Instructional Designer. Create an official DepEd ILAW Lesson Plan adhering strictly to DepEd Order No. 003, s. 2026 (Annex A Template).
 
                 CRITICAL FORMATTING RULES:
-                1. DO NOT use LaTeX syntax or dollar signs ($) for mathematical formulas, functions, or variables. Write math in clean plain text (e.g., write 'f(x) = mx + b' instead of '$f(x) = mx + b$').
-                2. Output text in standard, professional tone.
+                1. DO NOT use LaTeX syntax or dollar signs ($) for mathematical formulas, functions, or variables. Write math in clean plain text.
+                2. You MUST fill in EVERY single field below with thorough, high-quality content. Do not leave any key empty.
 
                 HEADER DETAILS:
                 - Teacher: {teacher_name} ({position_rank} - Stage: {stage_info['stage']})
@@ -476,26 +478,19 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                 TARGET COT INDICATORS TO EMBED:
                 {cot_prompt_text if cot_prompt_text else "Apply standard pedagogical strategies."}
 
-                STRUCTURE OUTPUT (use ':::' as delimiter):
+                YOU MUST USE THIS EXACT DELIMITED FORMAT (Include every key below):
 
-                ###1. INTENTIONS###
                 Learning Competency::: {learning_competency}
-                Learning Objectives::: [Provide 3 SMART objectives. Embed selected COT indicators using format: 📌 [COT INDICATOR: code: description]]
-                Learner Context::: {learner_context} [Embed relevant COT indicators using 📌 [COT INDICATOR: ...]]
-
-                ###2. LEARNING EXPERIENCE###
-                Pre-Lesson::: [Detail warmup. Embed COT indicators using 📌 [COT INDICATOR: ...]]
-                Instructional Flow::: [Detail direct instruction and ICT usage without dollar signs. Embed COT indicators using 📌 [COT INDICATOR: ...]]
-                Collaborative Group Activity::: [Detail differentiated group tasks. Embed COT indicators using 📌 [COT INDICATOR: ...]]
-                Synthesis & Resources::: [Detail debrief questions. Embed COT indicators using 📌 [COT INDICATOR: ...]]
-                Opportunities for Integration::: [Detail cross-curricular linkages. Embed COT indicators using 📌 [COT INDICATOR: ...]]
-
-                ###3. ASSESSMENT###
-                Formative Assessment::: [Detail evaluation tool. Embed COT indicators using 📌 [COT INDICATOR: ...]]
-
-                ###4. WAYS FORWARD###
-                Extended Learning Opportunities::: [Detail homework/remediation]
-                Teacher Reflections::: [Provide reflective remarks on mastery and teaching effectiveness]
+                Learning Objectives::: Provide 3 detailed SMART objectives here. End relevant statements with 📌 [COT INDICATOR: code: description]
+                Learner Context::: {learner_context} 📌 [COT INDICATOR: code: description]
+                Pre-Lesson::: Write detailed warmup, review, and behavioral expectations here. Embed 📌 [COT INDICATOR: code: description]
+                Instructional Flow::: Write detailed step-by-step direct instruction and ICT-assisted modeling here. Embed 📌 [COT INDICATOR: code: description]
+                Collaborative Group Activity::: Write detailed differentiated group tasks across stations here. Embed 📌 [COT INDICATOR: code: description]
+                Synthesis & Resources::: Write debriefing questions, generalizations, and instructional materials here. Embed 📌 [COT INDICATOR: code: description]
+                Opportunities for Integration::: Write cross-curricular integration details (e.g. Science, Health, Real-world applications) here. Embed 📌 [COT INDICATOR: code: description]
+                Formative Assessment::: Write detailed evaluation activity and checking strategies here. Embed 📌 [COT INDICATOR: code: description]
+                Extended Learning Opportunities::: Write homework or remedial tasks here.
+                Teacher Reflections::: Write reflective notes on student performance, strategy effectiveness, and areas for improvement here.
                 """
 
                 response = None
@@ -519,14 +514,34 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
 
                 raw_text = clean_math_syntax(response.text)
 
-                # Parse into dictionary
+                # ROBUST MULTI-LINE REGEX PARSER
+                keys_list = [
+                    "Learning Competency",
+                    "Learning Objectives",
+                    "Learner Context",
+                    "Pre-Lesson",
+                    "Instructional Flow",
+                    "Collaborative Group Activity",
+                    "Synthesis & Resources",
+                    "Opportunities for Integration",
+                    "Formative Assessment",
+                    "Extended Learning Opportunities",
+                    "Teacher Reflections",
+                ]
+
                 parsed_content = {}
-                for line in raw_text.split("\n"):
-                    if ":::" in line:
-                        parts = line.split(":::", 1)
-                        key = parts[0].replace("#", "").strip()
-                        val = parts[1].strip()
-                        parsed_content[key] = val
+                for i, k in enumerate(keys_list):
+                    if i < len(keys_list) - 1:
+                        next_k = keys_list[i + 1]
+                        pattern = rf"{re.escape(k)}:::(.*?)(?={re.escape(next_k)}:::|$)"
+                    else:
+                        pattern = rf"{re.escape(k)}:::(.*)"
+
+                    match = re.search(pattern, raw_text, re.DOTALL)
+                    if match:
+                        parsed_content[k] = match.group(1).strip()
+                    else:
+                        parsed_content[k] = "N/A"
 
                 header_info = {
                     "topic": topic,
@@ -541,7 +556,7 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                     f"Official DepEd ILAW Lesson Plan generated using model: `{successful_model}`!"
                 )
 
-                # Render Streamlit UI preview
+                # Streamlit UI Preview
                 st.markdown(
                     f"### ILAW LESSON PLAN ON {subject.upper()}\n*DepEd Order No. 003, s. 2026 (Annex A)*"
                 )
