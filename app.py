@@ -223,7 +223,7 @@ learning_competency = st.text_area(
 )
 
 # ------------------------------------------------------------------------------
-# 3. GENERATION ENGINE (AUTOMATIC MODEL FALLBACK)
+# 3. GENERATION ENGINE (UPDATED GEMINI MODEL FALLBACK)
 # ------------------------------------------------------------------------------
 st.divider()
 
@@ -243,12 +243,12 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
             try:
                 genai.configure(api_key=api_key.strip())
 
-                # Model candidates tried sequentially to prevent 404/API version errors
+                # Updated candidates with latest supported flash models
                 model_candidates = [
+                    "gemini-3.8-flash",
+                    "gemini-2.5-flash",
                     "gemini-1.5-flash",
                     "gemini-1.5-pro",
-                    "gemini-pro",
-                    "gemini-2.0-flash",
                 ]
 
                 cot_prompt_text = "\n".join(
