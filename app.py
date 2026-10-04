@@ -20,20 +20,33 @@ st.set_page_config(
 # ==========================================
 @st.cache_resource
 def init_firebase():
-    """Initializes Firebase Admin SDK using local file or Streamlit Secrets."""
+    """Initializes Firebase Admin SDK from Secrets, Env Vars, or local file."""
     if not firebase_admin._apps:
-        # Check for Streamlit Secrets (Deployment)
+        key_dict = None
+
+        # 1. Check Streamlit Secrets (TOML / Streamlit Cloud)
         if "text_key" in st.secrets:
             key_dict = dict(st.secrets["text_key"])
+
+        # 2. Check Vercel Environment Variables (JSON string)
+        elif os.getenv("text_key"):
+            key_dict = json.loads(os.getenv("text_key"))
+        elif os.getenv("FIREBASE_CREDENTIALS"):
+            key_dict = json.loads(os.getenv("FIREBASE_CREDENTIALS"))
+
+        # Initialize from dictionary if found
+        if key_dict:
             cred = credentials.Certificate(key_dict)
             firebase_admin.initialize_app(cred)
-        # Check for local serviceAccountKey.json file
+
+        # 3. Fallback to local serviceAccountKey.json file
         elif os.path.exists("serviceAccountKey.json"):
             cred = credentials.Certificate("serviceAccountKey.json")
             firebase_admin.initialize_app(cred)
         else:
-            st.error("Firebase credentials not found! Please check serviceAccountKey.json or st.secrets.")
+            st.error("Firebase credentials not found! Please check serviceAccountKey.json or Vercel Environment Variables.")
             st.stop()
+
     return firestore.client()
 
 db = init_firebase()
@@ -57,7 +70,7 @@ def validate_and_claim_license(license_key: str, email: str) -> tuple[bool, str]
         if data.get("used_by") == email.strip().lower():
             return True, "License verified."
         else:
-            return False, f"This key is already registered to another email address."
+            return False, "This key is already registered to another email address."
     
     # Claim key for new user
     key_ref.update({
@@ -83,7 +96,6 @@ def generate_lesson_plan_content(api_key: str, prompt: str) -> str:
             for m in genai.list_models() 
             if "generateContent" in m.supported_generation_methods
         ]
-        # Sort flash/pro models to top if present
         preferred_models = [m for m in available if "flash" in m or "pro" in m]
     except Exception:
         pass
