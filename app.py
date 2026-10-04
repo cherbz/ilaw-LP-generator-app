@@ -176,23 +176,13 @@ st.subheader("1. Lesson Details")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    grade_level = st.selectbox(
-        "Grade Level & Section",
-        [
-            "Grade 7 - Diamond",
-            "Grade 8 - Gold",
-            "Grade 9 - Kindness",
-            "Grade 10 - Wisdom",
-            "Grade 11 - STEM A",
-            "Grade 12 - TVL CSS",
-        ],
-    )
+    # FREE TEXT INPUT FOR GRADE & SECTION
+    grade_level = st.text_input("Grade Level & Section", "Grade 9 - Newton")
     subject = st.text_input("Learning Area", "Mathematics")
 
 with col2:
-    school_year = st.selectbox(
-        "School Year", list(COT_INDICATORS_BY_SY.keys())
-    )
+    # FREE TEXT INPUT FOR SCHOOL YEAR
+    school_year = st.text_input("School Year", "2025-2026")
     sessions = st.text_input("No. of Sessions", "1")
 
 with col3:
@@ -204,7 +194,10 @@ with col3:
 st.divider()
 st.subheader("2. Select COT Indicators to Integrate")
 
-available_indicators = COT_INDICATORS_BY_SY[school_year]
+# Match school year or fall back to default indicators list
+available_indicators = COT_INDICATORS_BY_SY.get(
+    school_year.strip(), COT_INDICATORS_BY_SY["2025-2026"]
+)
 selected_indicators = []
 
 for code, desc in available_indicators:
@@ -251,7 +244,7 @@ def set_cell_background(cell, hex_color):
 def build_deped_ilaw_docx(header_data, content_dict):
     doc = docx.Document()
 
-    # Set page margins
+    # Set margins
     for s in doc.sections:
         s.top_margin = Inches(0.8)
         s.bottom_margin = Inches(0.8)
@@ -310,7 +303,7 @@ def build_deped_ilaw_docx(header_data, content_dict):
 
     doc.add_paragraph()
 
-    # Section Table Helper
+    # Helper for Section Tables
     def add_section_table(section_title, rows_data):
         h_p = doc.add_paragraph()
         h_run = h_p.add_run(section_title)
@@ -321,7 +314,6 @@ def build_deped_ilaw_docx(header_data, content_dict):
         tbl = doc.add_table(rows=len(rows_data), cols=2)
         tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
 
-        # Matching pattern: captures [COT INDICATOR: ...] and optional leading icon/star
         cot_regex = re.compile(
             r"((?:📌|📌|\*|\+)?\s*\[COT INDICATOR:[^\]]+\])", re.IGNORECASE
         )
@@ -353,14 +345,12 @@ def build_deped_ilaw_docx(header_data, content_dict):
                     if not seg:
                         continue
                     if "[COT INDICATOR" in seg.upper():
-                        # ONLY COT INDICATOR HIGHLIGHTED IN YELLOW
                         r_cot = p2.add_run(f" {seg.strip()} ")
                         r_cot.bold = True
                         r_cot.font.size = Pt(10)
                         r_cot.font.color.rgb = RGBColor(0, 0, 0)
                         r_cot.font.highlight_color = WD_COLOR_INDEX.YELLOW
                     else:
-                        # STANDARD TEXT: BLACK & NO HIGHLIGHT
                         r_norm = p2.add_run(seg)
                         r_norm.font.size = Pt(10)
                         r_norm.font.color.rgb = RGBColor(0, 0, 0)
@@ -521,7 +511,6 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
 
                 raw_text = clean_math_syntax(response.text)
 
-                # Robust multi-line block extractor
                 keys_list = [
                     "Learning Competency",
                     "Learning Objectives",
