@@ -251,7 +251,7 @@ def set_cell_background(cell, hex_color):
 def build_deped_ilaw_docx(header_data, content_dict):
     doc = docx.Document()
 
-    # Margins
+    # Set page margins
     for s in doc.sections:
         s.top_margin = Inches(0.8)
         s.bottom_margin = Inches(0.8)
@@ -277,7 +277,7 @@ def build_deped_ilaw_docx(header_data, content_dict):
 
     doc.add_paragraph()
 
-    # Meta Table
+    # Meta Header Table
     meta_table = doc.add_table(rows=6, cols=2)
     meta_table.alignment = WD_TABLE_ALIGNMENT.CENTER
     meta_data = [
@@ -310,7 +310,7 @@ def build_deped_ilaw_docx(header_data, content_dict):
 
     doc.add_paragraph()
 
-    # Helper for Section Tables
+    # Section Table Helper
     def add_section_table(section_title, rows_data):
         h_p = doc.add_paragraph()
         h_run = h_p.add_run(section_title)
@@ -320,6 +320,11 @@ def build_deped_ilaw_docx(header_data, content_dict):
 
         tbl = doc.add_table(rows=len(rows_data), cols=2)
         tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+        # Matching pattern: captures [COT INDICATOR: ...] and optional leading icon/star
+        cot_regex = re.compile(
+            r"((?:📌|📌|\*|\+)?\s*\[COT INDICATOR:[^\]]+\])", re.IGNORECASE
+        )
 
         for r_idx, (lbl, text_content) in enumerate(rows_data):
             row = tbl.rows[r_idx]
@@ -343,22 +348,23 @@ def build_deped_ilaw_docx(header_data, content_dict):
                 if l_idx > 0:
                     p2 = c_val.add_paragraph()
 
-                segments = re.split(
-                    r"(📌\s*\[COT INDICATOR:[^\]]+\])", line
-                )
+                segments = cot_regex.split(line)
                 for seg in segments:
                     if not seg:
                         continue
-                    if seg.startswith("📌") or "[COT INDICATOR" in seg:
+                    if "[COT INDICATOR" in seg.upper():
+                        # ONLY COT INDICATOR HIGHLIGHTED IN YELLOW
                         r_cot = p2.add_run(f" {seg.strip()} ")
                         r_cot.bold = True
                         r_cot.font.size = Pt(10)
                         r_cot.font.color.rgb = RGBColor(0, 0, 0)
                         r_cot.font.highlight_color = WD_COLOR_INDEX.YELLOW
                     else:
+                        # STANDARD TEXT: BLACK & NO HIGHLIGHT
                         r_norm = p2.add_run(seg)
                         r_norm.font.size = Pt(10)
                         r_norm.font.color.rgb = RGBColor(0, 0, 0)
+                        r_norm.font.highlight_color = WD_COLOR_INDEX.AUTO
 
         doc.add_paragraph()
 
@@ -429,7 +435,7 @@ def build_deped_ilaw_docx(header_data, content_dict):
 
 
 # ==============================================================================
-# 4. GENERATION ENGINE (ROBUST MULTI-LINE PARSER)
+# 4. GENERATION ENGINE
 # ==============================================================================
 
 st.divider()
@@ -460,9 +466,10 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                 prompt = f"""
                 You are an expert DepEd Instructional Designer. Create an official DepEd ILAW Lesson Plan adhering strictly to DepEd Order No. 003, s. 2026 (Annex A Template).
 
-                CRITICAL FORMATTING RULES:
+                CRITICAL PLACEMENT & FORMATTING RULES:
                 1. DO NOT use LaTeX syntax or dollar signs ($) for mathematical formulas, functions, or variables. Write math in clean plain text.
-                2. You MUST fill in EVERY single field below with thorough, high-quality content. Do not leave any key empty.
+                2. IMPORTANT FOR COT INDICATORS: Place each indicator tag strictly at the VERY END of the paragraph/text block that demonstrates it. NEVER place it in the middle of sentences or before descriptive text.
+                3. Structure of COT Tag: Write explicitly as 📌 [COT INDICATOR: code: description] at the end of the text segment.
 
                 HEADER DETAILS:
                 - Teacher: {teacher_name} ({position_rank} - Stage: {stage_info['stage']})
@@ -478,19 +485,19 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                 TARGET COT INDICATORS TO EMBED:
                 {cot_prompt_text if cot_prompt_text else "Apply standard pedagogical strategies."}
 
-                YOU MUST USE THIS EXACT DELIMITED FORMAT (Include every key below):
+                STRUCTURE OUTPUT USING ':::' AS DELIMITER:
 
                 Learning Competency::: {learning_competency}
-                Learning Objectives::: Provide 3 detailed SMART objectives here. End relevant statements with 📌 [COT INDICATOR: code: description]
-                Learner Context::: {learner_context} 📌 [COT INDICATOR: code: description]
-                Pre-Lesson::: Write detailed warmup, review, and behavioral expectations here. Embed 📌 [COT INDICATOR: code: description]
-                Instructional Flow::: Write detailed step-by-step direct instruction and ICT-assisted modeling here. Embed 📌 [COT INDICATOR: code: description]
-                Collaborative Group Activity::: Write detailed differentiated group tasks across stations here. Embed 📌 [COT INDICATOR: code: description]
-                Synthesis & Resources::: Write debriefing questions, generalizations, and instructional materials here. Embed 📌 [COT INDICATOR: code: description]
-                Opportunities for Integration::: Write cross-curricular integration details (e.g. Science, Health, Real-world applications) here. Embed 📌 [COT INDICATOR: code: description]
-                Formative Assessment::: Write detailed evaluation activity and checking strategies here. Embed 📌 [COT INDICATOR: code: description]
+                Learning Objectives::: Provide 3 SMART objectives. Place COT indicator tags ONLY at the end of each objective. 📌 [COT INDICATOR: code: description]
+                Learner Context::: Describe class context thoroughly. Place COT indicator tag ONLY at the end of the text. 📌 [COT INDICATOR: code: description]
+                Pre-Lesson::: Write detailed warmup, review, and behavioral expectations. Place COT indicator tag ONLY at the end of the section. 📌 [COT INDICATOR: code: description]
+                Instructional Flow::: Write detailed step-by-step direct instruction and ICT-assisted modeling. Place COT indicator tag ONLY at the end of the section. 📌 [COT INDICATOR: code: description]
+                Collaborative Group Activity::: Write detailed differentiated group tasks across stations. Place COT indicator tag ONLY at the end of each station/activity description. 📌 [COT INDICATOR: code: description]
+                Synthesis & Resources::: Write debriefing questions and instructional materials. Place COT indicator tag ONLY at the end. 📌 [COT INDICATOR: code: description]
+                Opportunities for Integration::: Write cross-curricular integration details. Place COT indicator tag ONLY at the end. 📌 [COT INDICATOR: code: description]
+                Formative Assessment::: Write detailed evaluation activity. Place COT indicator tag ONLY at the end. 📌 [COT INDICATOR: code: description]
                 Extended Learning Opportunities::: Write homework or remedial tasks here.
-                Teacher Reflections::: Write reflective notes on student performance, strategy effectiveness, and areas for improvement here.
+                Teacher Reflections::: Write reflective notes on student performance and strategy effectiveness.
                 """
 
                 response = None
@@ -514,7 +521,7 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
 
                 raw_text = clean_math_syntax(response.text)
 
-                # ROBUST MULTI-LINE REGEX PARSER
+                # Robust multi-line block extractor
                 keys_list = [
                     "Learning Competency",
                     "Learning Objectives",
