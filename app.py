@@ -8,8 +8,6 @@ from firebase_admin import credentials, firestore
 from docx import Document
 from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
 
 # ==========================================
 # 1. PAGE CONFIGURATION
@@ -73,7 +71,7 @@ def init_firebase():
 db = init_firebase()
 
 # ==========================================
-# 3. HELPER FUNCTIONS & DOCX GENERATION
+# 3. HELPER FUNCTIONS & DYNAMIC MODEL DISCOVERY
 # ==========================================
 def validate_and_claim_license(license_key: str, email: str) -> tuple[bool, str]:
     if not license_key or not email:
@@ -100,16 +98,35 @@ def validate_and_claim_license(license_key: str, email: str) -> tuple[bool, str]
     return True, "License key successfully activated!"
 
 def generate_lesson_plan_content(api_key: str, prompt: str) -> str:
+    """Dynamically queries available models for the user's key to ensure compatibility across model updates."""
     genai.configure(api_key=api_key.strip())
     
-    candidate_models = [
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro"
-    ]
+    candidate_models = []
+    
+    # 1. Dynamically discover valid content generation models from user's API key
+    try:
+        all_models = list(genai.list_models())
+        supported_models = [
+            m.name.replace("models/", "") 
+            for m in all_models 
+            if "generateContent" in m.supported_generation_methods
+        ]
+        
+        # Prioritize flash / pro general models
+        flash_models = [m for m in supported_models if "flash" in m]
+        pro_models = [m for m in supported_models if "pro" in m]
+        other_models = [m for m in supported_models if m not in flash_models and m not in pro_models]
+        
+        candidate_models = flash_models + pro_models + other_models
+    except Exception:
+        # Fallback list if model listing fails
+        candidate_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"]
+
+    if not candidate_models:
+        candidate_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"]
 
     last_error = None
+    # 2. Iterate through candidate models until one succeeds
     for model_name in candidate_models:
         try:
             model = genai.GenerativeModel(model_name)
@@ -120,13 +137,12 @@ def generate_lesson_plan_content(api_key: str, prompt: str) -> str:
             last_error = e
             continue
 
-    raise Exception(f"Unable to generate content with provided key. Last error: {str(last_error)}")
+    raise Exception(f"Unable to generate content with provided key. Attempted models: {candidate_models}. Last error: {str(last_error)}")
 
 def create_docx_ilaw_template(data_dict: dict) -> io.BytesIO:
     """Generates a structured DepEd Order No. 003, s. 2026 ILAW Word Document."""
     doc = Document()
 
-    # Document margins
     sections = doc.sections
     for section in sections:
         section.top_margin = Inches(0.75)
@@ -134,7 +150,6 @@ def create_docx_ilaw_template(data_dict: dict) -> io.BytesIO:
         section.left_margin = Inches(0.75)
         section.right_margin = Inches(0.75)
 
-    # Title
     p_title = doc.add_paragraph()
     p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_title = p_title.add_run(f"ILAW LESSON PLAN ON {data_dict.get('learning_area', 'MATHEMATICS').upper()}")
@@ -149,7 +164,6 @@ def create_docx_ilaw_template(data_dict: dict) -> io.BytesIO:
     run_sub.font.italic = True
     run_sub.font.color.rgb = RGBColor(100, 100, 100)
 
-    # Header Meta Table
     meta_table = doc.add_table(rows=6, cols=2)
     meta_table.autofit = False
     
@@ -176,9 +190,8 @@ def create_docx_ilaw_template(data_dict: dict) -> io.BytesIO:
         p_val.add_run(val)
         p_val.paragraph_format.space_after = Pt(2)
 
-    doc.add_paragraph() # Spacer
+    doc.add_paragraph()
 
-    # ILAW Main Sections
     ilaw_sections = [
         ("1. INTENTIONS", [
             ("Learning Competency", data_dict.get("competency", "")),
@@ -221,9 +234,8 @@ def create_docx_ilaw_template(data_dict: dict) -> io.BytesIO:
             p_v = c_val.paragraphs[0]
             p_v.add_run(text_val)
 
-        doc.add_paragraph() # Spacer
+        doc.add_paragraph()
 
-    # Buffer export
     file_stream = io.BytesIO()
     doc.save(file_stream)
     file_stream.seek(0)
@@ -316,7 +328,7 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
             st.error(f"License Error: {msg}")
         else:
             st.success(msg)
-            with st.spinner("Generating DepEd ILAW Lesson Plan (DO No. 003, s. 2026)..."):
+            with st.spinner("Discovering active Gemini model & generating DepEd ILAW Lesson Plan..."):
                 
                 selected_cots = []
                 if cot1: selected_cots.append("[COT INDICATOR: 1.1.2: Apply knowledge of content within and across curriculum teaching areas.]")
@@ -358,7 +370,6 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                 try:
                     raw_res = generate_lesson_plan_content(api_key_input, prompt)
                     
-                    # Clean potential markdown wrapping around JSON
                     clean_json = raw_res.strip()
                     if clean_json.startswith("```json"):
                         clean_json = clean_json[7:]
@@ -372,7 +383,6 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                     st.markdown("---")
                     st.subheader("📋 Generated DepEd ILAW Lesson Plan (DO No. 003, s. 2026)")
 
-                    # Display on Web
                     st.markdown(f"### ILAW LESSON PLAN ON {ilaw_data.get('learning_area', 'MATHEMATICS').upper()}")
                     st.caption("DepEd Order No. 003, s. 2026 (Annex A Template) | COT Indicators Embedded")
 
@@ -395,7 +405,6 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                     st.write(f"**Extended Learning Opportunities:** {ilaw_data.get('extended_learning')}")
                     st.write(f"**Teacher Reflections:** {ilaw_data.get('reflections')}")
 
-                    # Generate Word File Download
                     docx_file = create_docx_ilaw_template(ilaw_data)
 
                     st.markdown("---")
