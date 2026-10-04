@@ -58,7 +58,6 @@ def init_firebase():
 
         # Initialize Firebase if credentials were found
         if key_dict:
-            # Fix escaped newlines in private key string if present
             if "private_key" in key_dict and isinstance(key_dict["private_key"], str):
                 key_dict["private_key"] = key_dict["private_key"].replace("\\n", "\n")
                 
@@ -109,7 +108,6 @@ def generate_lesson_plan_content(api_key: str, prompt: str) -> str:
     """Generates content using user key with dynamic model auto-selection & fallbacks."""
     genai.configure(api_key=api_key.strip())
     
-    # 1. Try to fetch active models supported by the key
     preferred_models = []
     try:
         available = [
@@ -121,7 +119,6 @@ def generate_lesson_plan_content(api_key: str, prompt: str) -> str:
     except Exception:
         pass
 
-    # 2. Fallbacks in case list_models isn't permitted by key scope
     fallback_models = [
         "gemini-2.5-flash",
         "gemini-2.0-flash",
@@ -168,12 +165,41 @@ st.sidebar.caption("COT Scale: 2 to 6")
 # ==========================================
 st.title("💡 Binonz ILAW Lesson Plan Generator")
 
-col1, col2 = st.columns(2)
+# --- SECTION 1: BASIC INFORMATION ---
+st.subheader("1. Basic Information & Meta Details")
+col1, col2, col3 = st.columns(3)
 with col1:
-    st.checkbox("[4.5.2] Select, develop, organize and use appropriate teaching and learning resources, including ICT, to address learning goals", value=True)
+    grade_level = st.selectbox("Grade Level", ["Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"])
+    learning_area = st.text_input("Learning Area / Subject", value="Mathematics")
 with col2:
-    st.checkbox("[5.1.2] Design, select, organize and use diagnostic, formative and summative assessment strategies consistent with curriculum requirements", value=True)
+    quarter = st.selectbox("Quarter", ["Quarter 1", "Quarter 2", "Quarter 3", "Quarter 4"])
+    teaching_date = st.date_input("Teaching Date")
+with col3:
+    time_allotment = st.text_input("Time Allotment", value="60 Minutes")
+    school_name = st.text_input("School Name", value="DepEd High School")
 
+st.markdown("---")
+
+# --- SECTION 2: COT INDICATORS ---
+st.subheader("2. Classroom Observation Tool (COT) Indicators & PPST Targets")
+st.caption("Select the PPST/COT Indicators to target in this lesson plan:")
+
+cot_col1, cot_col2 = st.columns(2)
+with cot_col1:
+    cot1 = st.checkbox("[1.1.2] Apply knowledge of content within and across curriculum teaching areas", value=True)
+    cot2 = st.checkbox("[1.4.2] Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills", value=True)
+    cot3 = st.checkbox("[1.5.2] Apply a range of teaching strategies to develop critical and creative thinking", value=True)
+    cot4 = st.checkbox("[4.5.2] Select, develop, organize and use appropriate teaching and learning resources, including ICT, to address learning goals", value=True)
+
+with cot_col2:
+    cot5 = st.checkbox("[2.3.2] Manage classroom structure to engage learners in hands-on/collaborative activities", value=True)
+    cot6 = st.checkbox("[3.1.2] Use differentiated, developmentally appropriate learning experiences", value=True)
+    cot7 = st.checkbox("[5.1.2] Design, select, organize and use diagnostic, formative and summative assessment strategies consistent with curriculum requirements", value=True)
+    cot8 = st.checkbox("[5.2.2] Monitor and evaluate learner progress and achievement using learner attainment data", value=False)
+
+st.markdown("---")
+
+# --- SECTION 3: LEARNING OBJECTIVES & CONTEXT ---
 st.subheader("3. Learning Objectives & Context")
 
 learning_competency = st.text_area(
@@ -201,16 +227,37 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
         else:
             st.success(msg)
             with st.spinner("Generating Detailed Lesson Plan using Gemini API..."):
+                
+                # Gather active COT targets
+                selected_cots = []
+                if cot1: selected_cots.append("1.1.2 Knowledge across curriculum")
+                if cot2: selected_cots.append("1.4.2 Literacy and Numeracy strategies")
+                if cot3: selected_cots.append("1.5.2 Critical and Creative thinking")
+                if cot4: selected_cots.append("4.5.2 ICT Integration & Learning Resources")
+                if cot5: selected_cots.append("2.3.2 Hands-on & Collaborative learning")
+                if cot6: selected_cots.append("3.1.2 Differentiated instruction")
+                if cot7: selected_cots.append("5.1.2 Assessment Strategies")
+                if cot8: selected_cots.append("5.2.2 Monitoring learner progress")
+
                 prompt = f"""
                 You are an expert DepEd Curriculum Specialist. Generate a detailed ILAW Lesson Plan based on the following details:
 
-                Teacher Name: {teacher_name}
-                Position/Rank: {position}
-                Career Stage: {career_stage}
-                Learning Competency: {learning_competency}
-                Learner Context: {learner_context}
+                **BASIC INFORMATION:**
+                - Teacher Name: {teacher_name}
+                - Position/Rank: {position}
+                - Career Stage: {career_stage}
+                - School: {school_name}
+                - Grade & Subject: {grade_level} - {learning_area}
+                - Quarter & Duration: {quarter} ({time_allotment})
 
-                Please output a fully structured, professional lesson plan with complete learning objectives, procedures, ICT integration, and assessment strategies.
+                **TARGET COT/PPST INDICATORS:**
+                {", ".join(selected_cots)}
+
+                **CURRICULUM CONTEXT:**
+                - Learning Competency: {learning_competency}
+                - Learner Context: {learner_context}
+
+                Please output a complete, professionally structured DepEd ILAW Lesson Plan highlighting explicit integration of the targeted COT indicators across learning objectives, ILAW procedure steps, ICT integration, and assessment strategies.
                 """
 
                 try:
