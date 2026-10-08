@@ -1,30 +1,26 @@
 import io
 import re
 import json
-import streamlit as st
+import docx
+from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Inches, Pt, RGBColor
 import google.generativeai as genai
 import firebase_admin
 from firebase_admin import credentials, firestore
-from docx import Document
+import streamlit as st
 
-# ---------------------------------------------------------
-# 1. PAGE CONFIGURATION & STYLING
-# ---------------------------------------------------------
-st.set_page_config(
-    page_title="Binonz Semi-Detailed ILAW Lesson Plan Generator",
-    page_icon="💡",
-    layout="wide"
-)
+# ==============================================================================
+# 1. FIREBASE INITIALIZATION & LICENSE VALIDATION
+# ==============================================================================
 
-# ---------------------------------------------------------
-# 2. FIREBASE & GEMINI INITIALIZATION
-# ---------------------------------------------------------
 @st.cache_resource
 def init_firebase():
-    """Initialize Firebase Admin SDK using Streamlit Secrets."""
+    """Initializes Firebase Admin SDK using Streamlit Secrets."""
     if not firebase_admin._apps:
         try:
-            # Check if secret string exists
             if "FIREBASE_CREDENTIALS" in st.secrets:
                 cred_data = json.loads(st.secrets["FIREBASE_CREDENTIALS"])
                 cred = credentials.Certificate(cred_data)
@@ -39,28 +35,24 @@ def init_firebase():
 
 db = init_firebase()
 
-# ---------------------------------------------------------
-# 3. HELPER & VALIDATION FUNCTIONS
-# ---------------------------------------------------------
 def validate_and_claim_license(license_key, email_input):
     """
-    Validates the license key against Firestore.
-    Includes explicit checks to prevent empty path crashes.
+    Validates license key in Firestore.
+    Fixes the 'even number of path elements' error by validating empty strings FIRST.
     """
     key = license_key.strip() if license_key else ""
     email = email_input.strip() if email_input else ""
 
-    # Check empty input FIRST to avoid invalid Firestore path elements (must be even)
+    # Prevent empty path queries in Firestore
     if not key:
         return False, "Please enter a valid License Key."
     if not email:
         return False, "Please enter your Registered Email Address."
 
     if not db:
-        return False, "Database connection not available."
+        return False, "Database connection is unavailable."
 
     try:
-        # Fetch document from Firestore
         key_ref = db.collection("license_keys").document(key)
         doc = key_ref.get()
 
@@ -71,137 +63,320 @@ def validate_and_claim_license(license_key, email_input):
         registered_email = data.get("email", "").strip().lower()
 
         if registered_email and registered_email != email.lower():
-            return False, "Email does not match the registered key user."
+            return False, "Email address does not match the registered license owner."
 
         return True, "License validated successfully!"
 
     except Exception as e:
         return False, f"Database Error: {str(e)}"
 
-def generate_lesson_plan(api_key, meta_data, cot_targets, teacher_info):
-    """Generates lesson plan via Gemini API."""
-    try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
 
-        prompt = f"""
-        Act as an expert DepEd Educator. Create a Semi-Detailed ILAW Lesson Plan based on:
-        
-        Teacher Profile:
-        - Name: {teacher_info['name']}
-        - Position: {teacher_info['position']}
-        - Career Stage: {teacher_info['stage']}
-        
-        Meta Details:
-        - Grade Level: {meta_data['grade']}
-        - Section: {meta_data['section']}
-        - Subject: {meta_data['subject']}
-        - Quarter: {meta_data['quarter']}
-        - Lesson: {meta_data['lesson_name']}
-        - Time Allotment: {meta_data['time']}
-        - Date: {meta_data['date']}
-        
-        Selected COT/PPST Indicators:
-        {', '.join(cot_targets)}
-        
-        Structure the lesson plan clearly using DepEd ILAW standards.
-        """
-        
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"Error generating content from Gemini: {str(e)}"
+# ==============================================================================
+# 2. COT DATA STRUCTURES & CAREER STAGE MAPPING
+# ==============================================================================
 
-# ---------------------------------------------------------
-# 4. STREAMLIT FRONTEND UI
-# ---------------------------------------------------------
-st.title("💡 Binonz Semi-Detailed ILAW Lesson Plan Generator")
+CAREER_STAGES = {
+    "Teacher I": {"stage": "Beginning to Proficient", "scale": "2 to 6"},
+    "Teacher II": {"stage": "Beginning to Proficient", "scale": "2 to 6"},
+    "Teacher III": {"stage": "Beginning to Proficient", "scale": "2 to 6"},
+    "Teacher IV": {"stage": "Proficient", "scale": "3 to 7"},
+    "Teacher V": {"stage": "Proficient", "scale": "3 to 7"},
+    "Teacher VI": {"stage": "Proficient", "scale": "3 to 7"},
+    "Teacher VII": {"stage": "Proficient", "scale": "3 to 7"},
+    "Master Teacher I": {"stage": "Highly Proficient", "scale": "4 to 8"},
+    "Master Teacher II": {"stage": "Highly Proficient", "scale": "4 to 8"},
+    "Master Teacher III": {"stage": "Distinguished", "scale": "5 to 9"},
+    "Master Teacher IV": {"stage": "Distinguished", "scale": "5 to 9"},
+    "Master Teacher V": {"stage": "Distinguished", "scale": "5 to 9"},
+}
 
-# Sidebar - Setup & Profile
+COT_INDICATORS_BY_SY = {
+    "2025-2026": [
+        ("1.1.2", "Apply knowledge of content within and across curriculum teaching areas"),
+        ("1.4.2", "Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills"),
+        ("1.5.2", "Apply a range of teaching strategies to develop critical and creative thinking, as well as other higher-order thinking skills"),
+        ("2.3.2", "Manage classroom structure to engage learners, individually or in groups, in meaningful exploration, discovery and hands-on activities within a range of physical learning environments"),
+        ("2.6.2", "Manage learner behavior constructively by applying positive and non-violent discipline to ensure learning-focused environments"),
+        ("3.1.2", "Use differentiated, developmentally appropriate learning experiences to address learners' gender, needs, strengths, interests and experiences"),
+        ("4.1.2", "Plan, manage and implement developmentally sequenced teaching and learning process to meet curriculum requirements and varied teaching contexts"),
+        ("4.5.2", "Select, develop, organize and use appropriate teaching and learning resources, including ICT, to address learning goals"),
+        ("5.1.2", "Design, select, organize and use diagnostic, formative and summative assessment strategies consistent with curriculum requirements"),
+    ],
+    "2026-2027": [
+        ("1.1.2", "Apply knowledge of content within and across curriculum teaching areas"),
+        ("1.4.2", "Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills"),
+        ("1.5.2", "Apply a range of teaching strategies to develop critical and creative thinking, as well as other higher-order thinking skills"),
+        ("1.6.2", "Display proficient use of Mother Tongue, Filipino and English to facilitate teaching and learning"),
+        ("2.1.2", "Establish safe and secure learning environments to enhance learning through the consistent implementation of policies, guidelines and procedures"),
+        ("2.2.2", "Maintain learning environments that promote fairness, respect and care to encourage learning"),
+        ("3.2.2", "Establish a learner-centered culture by using teaching strategies that respond to learners' linguistic, cultural, socio-economic and religious backgrounds"),
+        ("3.5.2", "Adapt and use culturally appropriate teaching strategies to address the needs of learners from indigenous groups"),
+        ("5.3.2", "Use strategies for providing timely, accurate and constructive feedback to improve learner performance"),
+    ],
+    "2027-2028": [
+        ("1.1.2", "Apply knowledge of content within and across curriculum teaching areas"),
+        ("1.4.2", "Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills"),
+        ("1.3.2", "Ensure the positive use of ICT to facilitate the teaching and learning process"),
+        ("1.7.2", "Use effective verbal and non-verbal classroom communication strategies to support learner understanding, participation, engagement and achievement"),
+        ("2.4.2", "Maintain supportive learning environments that nurture and inspire learners to participate, cooperate and collaborate in continued learning"),
+        ("2.5.2", "Apply a range of successful strategies that maintain learning environments that motivate learners to work productively by assuming responsibility for their own learning"),
+        ("3.3.2", "Design, adapt and implement teaching strategies that are responsive to learners with disabilities, giftedness and talents"),
+        ("3.4.2", "Plan and deliver teaching strategies that are responsive to the special educational needs of learners in difficult circumstances"),
+    ],
+}
+
+# ==============================================================================
+# 3. STREAMLIT APP LAYOUT
+# ==============================================================================
+
+st.set_page_config(page_title="Binonz ILAW Lesson Plan Generator", page_icon="📝", layout="wide")
+
+st.title("💡 Binonz ILAW Lesson Plan Generator")
+st.caption("DepEd Order No. 003, s. 2026 (Annex A Template) | Automated COT Indicator Embedding")
+
+# SIDEBAR: CREDENTIALS & TEACHER PROFILE
 with st.sidebar:
-    st.header("🔑 Authentication & Setup")
-    license_key = st.text_input("License Key", type="password", help="Enter your product license key")
-    email_input = st.text_input("Registered Email Address", help="Enter your registered email")
-    gemini_api_key = st.text_input("Gemini API Key", type="password", help="Enter your Google Gemini API Key")
+    st.header("🔑 Authentication")
+    license_key = st.text_input("License Key", type="password")
+    user_email = st.text_input("Registered Email Address")
+    api_key = st.text_input("Gemini API Key", type="password")
 
-    st.markdown("---")
+    st.divider()
     st.header("👤 Teacher Profile & Position")
-    teacher_name = st.text_input("Teacher Name", value="NORBERTO P. BINONDO JR.")
-    position = st.selectbox("Position / Rank", ["Teacher I", "Teacher II", "Teacher III", "Master Teacher I", "Master Teacher II"], index=2)
-    career_stage = st.selectbox("Career Stage", ["Beginning to Proficient", "Proficient", "Highly Proficient", "Distinguished"])
+    teacher_name = st.text_input("Teacher Name", "NORBERTO P. BINONDO JR.")
+    position_rank = st.selectbox("Position / Rank", list(CAREER_STAGES.keys()), index=2)
 
-# Main Form Area
-st.subheader("1. Basic Information & Meta Details")
+    stage_info = CAREER_STAGES[position_rank]
+    st.info(f"**Career Stage:** {stage_info['stage']}\n\n**COT Scale:** {stage_info['scale']}")
 
+# MAIN FORM: LESSON DETAILS
+st.subheader("1. Lesson Details")
 col1, col2, col3 = st.columns(3)
+
 with col1:
-    grade_level = st.selectbox("Grade Level", ["Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"])
-    subject = st.text_input("Learning Area / Subject", value="Mathematics")
-    lesson_name = st.text_input("Name of Lesson", value="Graphing Linear Functions")
+    grade_level = st.text_input("Grade Level & Section", "Grade 9 - Newton")
+    subject = st.text_input("Learning Area", "Mathematics")
 
 with col2:
-    section = st.text_input("Section", value="Kindness")
-    quarter = st.selectbox("Quarter", ["Quarter 1", "Quarter 2", "Quarter 3", "Quarter 4"])
-    teaching_date = st.date_input("Teaching Date")
+    school_year = st.text_input("School Year", "2025-2026")
+    sessions = st.text_input("No. of Sessions", "1")
 
 with col3:
-    time_allotment = st.text_input("Time Allotment", value="60 Minutes")
-    school_name = st.text_input("School Name", value="DepEd High School")
+    topic = st.text_input("Name of Lesson / Topic", "Graphing Linear Functions")
+    references = st.text_input("References", "DepEd Curriculum Guide & Presentation Slides")
 
-st.markdown("---")
-st.subheader("2. Classroom Observation Tool (COT) Indicators & PPST Targets")
-st.caption("Select the PPST/COT Indicators to target in this lesson plan:")
+st.divider()
+st.subheader("2. Select COT Indicators to Integrate")
 
-cot_col1, cot_col2 = st.columns(2)
-selected_cots = []
+available_indicators = COT_INDICATORS_BY_SY.get(
+    school_year.strip(), COT_INDICATORS_BY_SY["2025-2026"]
+)
+selected_indicators = []
 
-with cot_col1:
-    if st.checkbox("[1.1.2] Apply knowledge of content within and across curriculum teaching areas", value=True):
-        selected_cots.append("[1.1.2] Apply knowledge of content within and across curriculum teaching areas")
-    if st.checkbox("[1.4.2] Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills", value=True):
-        selected_cots.append("[1.4.2] Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills")
-    if st.checkbox("[1.5.2] Apply a range of teaching strategies to develop critical and creative thinking", value=True):
-        selected_cots.append("[1.5.2] Apply a range of teaching strategies to develop critical and creative thinking")
+for code, desc in available_indicators:
+    if st.checkbox(f"**[{code}]** {desc}", value=True):
+        selected_indicators.append(f"COT INDICATOR {code}: {desc}")
 
-with cot_col2:
-    if st.checkbox("[2.3.2] Manage classroom structure to engage learners in hands-on/collaborative activities", value=True):
-        selected_cots.append("[2.3.2] Manage classroom structure to engage learners in hands-on/collaborative activities")
-    if st.checkbox("[3.1.2] Use differentiated, developmentally appropriate learning experiences", value=True):
-        selected_cots.append("[3.1.2] Use differentiated, developmentally appropriate learning experiences")
-    if st.checkbox("[5.1.2] Design, select, organize and use diagnostic, formative and summative assessment strategies", value=True):
-        selected_cots.append("[5.1.2] Design, select, organize and use diagnostic, formative and summative assessment strategies")
+st.divider()
+st.subheader("3. Learning Objectives & Context")
+learning_competency = st.text_area(
+    "Learning Competency",
+    "Graphs a linear function and values its real-life applications (domain, range, intercepts, and slope).",
+)
+learner_context = st.text_area(
+    "Learner Context",
+    "The class is a mixed-ability group of learners with varied mathematical inclinations. Visual and kinesthetic learners benefit from coordinate plotting exercises.",
+)
 
-st.markdown("---")
+# ==============================================================================
+# 4. HELPER FUNCTIONS TO CLEAN MATH & BUILD DOCX
+# ==============================================================================
 
-# Submit Button
-if st.button("🚀 Generate Semi-Detailed Lesson Plan", use_container_width=True, type="primary"):
-    if not gemini_api_key:
-        st.error("Please provide a valid Gemini API Key in the sidebar.")
+def clean_math_syntax(text: str) -> str:
+    """Removes LaTeX dollar signs ($) and cleans math formatting."""
+    cleaned = re.sub(r"\$+", "", text)
+    cleaned = (
+        cleaned.replace("\\", "")
+        .replace("angle", "∠")
+        .replace("circ", "°")
+        .replace("&", "&")
+    )
+    return cleaned
+
+def set_cell_background(cell, hex_color):
+    tcPr = cell._element.get_or_add_tcPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:color"), "auto")
+    shd.set(qn("w:fill"), hex_color)
+    tcPr.append(shd)
+
+def build_deped_ilaw_docx(header_data, content_dict):
+    doc = docx.Document()
+
+    for s in doc.sections:
+        s.top_margin = Inches(0.8)
+        s.bottom_margin = Inches(0.8)
+        s.left_margin = Inches(0.8)
+        s.right_margin = Inches(0.8)
+
+    p_title = doc.add_paragraph()
+    p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_title = p_title.add_run(f"ILAW LESSON PLAN ON {clean_math_syntax(header_data['subject']).upper()}\n")
+    run_title.bold = True
+    run_title.font.size = Pt(16)
+    run_title.font.color.rgb = RGBColor(15, 32, 67)
+
+    run_sub = p_title.add_run("DepEd Order No. 003, s. 2026 (Annex A Template) | COT Indicators Embedded")
+    run_sub.font.size = Pt(10)
+    run_sub.font.italic = True
+    run_sub.font.color.rgb = RGBColor(100, 100, 100)
+
+    doc.add_paragraph()
+
+    meta_table = doc.add_table(rows=6, cols=2)
+    meta_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    meta_data = [
+        ("Name of Lesson", clean_math_syntax(header_data["topic"])),
+        ("Learning Area/s", clean_math_syntax(header_data["subject"])),
+        ("Designed by Teacher/s", clean_math_syntax(header_data["teacher"])),
+        ("Grade Level & Section", clean_math_syntax(header_data["grade"])),
+        ("No. of Sessions", clean_math_syntax(header_data["sessions"])),
+        ("References", clean_math_syntax(header_data["references"])),
+    ]
+
+    for idx, (label, val) in enumerate(meta_data):
+        row = meta_table.rows[idx]
+        cell_lbl, cell_val = row.cells[0], row.cells[1]
+        cell_lbl.width = Inches(2.2)
+        cell_val.width = Inches(4.5)
+
+        set_cell_background(cell_lbl, "F2F4F8")
+
+        p_lbl = cell_lbl.paragraphs[0]
+        r_lbl = p_lbl.add_run(label)
+        r_lbl.bold = True
+        r_lbl.font.size = Pt(10)
+        r_lbl.font.color.rgb = RGBColor(0, 0, 0)
+
+        p_val = cell_val.paragraphs[0]
+        r_val = p_val.add_run(val)
+        r_val.font.size = Pt(10)
+        r_val.font.color.rgb = RGBColor(0, 0, 0)
+
+    doc.add_paragraph()
+
+    def add_section_table(section_title, rows_data):
+        h_p = doc.add_paragraph()
+        h_run = h_p.add_run(section_title)
+        h_run.bold = True
+        h_run.font.size = Pt(12)
+        h_run.font.color.rgb = RGBColor(15, 32, 67)
+
+        tbl = doc.add_table(rows=len(rows_data), cols=2)
+        tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+        cot_regex = re.compile(r"((?:📌|📌|\*|\+)?\s*\[COT INDICATOR:[^\]]+\])", re.IGNORECASE)
+
+        for r_idx, (lbl, text_content) in enumerate(rows_data):
+            row = tbl.rows[r_idx]
+            c_lbl, c_val = row.cells[0], row.cells[1]
+            c_lbl.width = Inches(2.2)
+            c_val.width = Inches(4.5)
+
+            set_cell_background(c_lbl, "EBF3FC")
+
+            p1 = c_lbl.paragraphs[0]
+            r1 = p1.add_run(lbl)
+            r1.bold = True
+            r1.font.size = Pt(10)
+            r1.font.color.rgb = RGBColor(0, 0, 0)
+
+            p2 = c_val.paragraphs[0]
+            clean_text = clean_math_syntax(text_content.strip())
+
+            lines = clean_text.split("\n")
+            for l_idx, line in enumerate(lines):
+                if l_idx > 0:
+                    p2 = c_val.add_paragraph()
+
+                segments = cot_regex.split(line)
+                for seg in segments:
+                    if not seg:
+                        continue
+                    if "[COT INDICATOR" in seg.upper():
+                        r_cot = p2.add_run(f" {seg.strip()} ")
+                        r_cot.bold = True
+                        r_cot.font.size = Pt(10)
+                        r_cot.font.color.rgb = RGBColor(0, 0, 0)
+                        r_cot.font.highlight_color = WD_COLOR_INDEX.YELLOW
+                    else:
+                        r_norm = p2.add_run(seg)
+                        r_norm.font.size = Pt(10)
+                        r_norm.font.color.rgb = RGBColor(0, 0, 0)
+                        r_norm.font.highlight_color = WD_COLOR_INDEX.AUTO
+
+        doc.add_paragraph()
+
+    # Section 1: INTENTIONS
+    add_section_table(
+        "1. INTENTIONS",
+        [
+            ("Learning Competency", content_dict.get("Learning Competency", "")),
+            ("Learning Objectives", content_dict.get("Learning Objectives", "")),
+            ("Learner Context", content_dict.get("Learner Context", "")),
+        ],
+    )
+
+    # Section 2: LEARNING EXPERIENCE
+    add_section_table(
+        "2. LEARNING EXPERIENCE",
+        [
+            ("Pre-Lesson (Getting Ready)", content_dict.get("Pre-Lesson", "")),
+            ("Instructional Flow & Direct Modeling", content_dict.get("Instructional Flow", "")),
+            ("Collaborative Group Activity", content_dict.get("Collaborative Group Activity", "")),
+            ("Synthesis & Resources", content_dict.get("Synthesis & Resources", "")),
+            ("Opportunities for Integration", content_dict.get("Opportunities for Integration", "")),
+        ],
+    )
+
+    # Section 3: ASSESSMENT
+    add_section_table(
+        "3. ASSESSMENT",
+        [("Formative Assessment (Individual Evaluation)", content_dict.get("Formative Assessment", ""))],
+    )
+
+    # Section 4: WAYS FORWARD
+    add_section_table(
+        "4. WAYS FORWARD",
+        [
+            ("Extended Learning Opportunities", content_dict.get("Extended Learning Opportunities", "")),
+            ("Teacher Reflections", content_dict.get("Teacher Reflections", "")),
+        ],
+    )
+
+    doc_buffer = io.BytesIO()
+    doc.save(doc_buffer)
+    doc_buffer.seek(0)
+    return doc_buffer
+
+
+# ==============================================================================
+# 5. GENERATION ENGINE & LICENSE CHECK
+# ==============================================================================
+
+st.divider()
+
+if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=True):
+    if not api_key:
+        st.error("Please enter a valid Gemini API Key in the sidebar.")
+    elif not license_key or not user_email:
+        st.warning("Please enter your registered Email and License Key.")
     else:
-        # Validate License First
-        is_valid, msg = validate_and_claim_license(license_key, email_input)
+        # Validate license before proceeding
+        is_valid, msg = validate_and_claim_license(license_key, user_email)
         if not is_valid:
             st.error(msg)
         else:
             st.success(msg)
-            with st.spinner("Generating lesson plan... Please wait..."):
-                meta_data = {
-                    "grade": grade_level,
-                    "subject": subject,
-                    "lesson_name": lesson_name,
-                    "section": section,
-                    "quarter": quarter,
-                    "date": str(teaching_date),
-                    "time": time_allotment,
-                    "school": school_name
-                }
-                teacher_info = {
-                    "name": teacher_name,
-                    "position": position,
-                    "stage": career_stage
-                }
-                
-                result = generate_lesson_plan(gemini_api_key, meta_data, selected_cots, teacher_info)
-                
-                st.markdown("### Generated Lesson Plan")
-                st.write(result)
+            with st.spinner("Generating DepEd Order No. 003, s. 2026 (Annex A) ILAW Lesson Plan..."):
