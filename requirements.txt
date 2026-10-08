@@ -1,5 +1,3 @@
-streamlit
-flask
-firebase-admin
-google-generativeai>=0.8.0
-python-docx
+git add requirements.txt
+git commit -m "Fix dependency resolution depth in requirements.txt"
+git push origin main
