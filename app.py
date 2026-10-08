@@ -362,7 +362,7 @@ def build_deped_ilaw_docx(header_data, content_dict):
 
 
 # ==============================================================================
-# 5. GENERATION ENGINE & LICENSE CHECK
+# 5. GENERATION ENGINE & DYNAMIC GEMINI MODEL FINDER
 # ==============================================================================
 
 st.divider()
@@ -383,11 +383,29 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                 try:
                     genai.configure(api_key=api_key.strip())
 
-                    model_candidates = [
-                        "gemini-2.5-flash",
+                    # DYNAMIC MODEL SELECTION: Queries available models supported by the provided API key
+                    available_models = []
+                    try:
+                        for m in genai.list_models():
+                            if 'generateContent' in m.supported_generation_methods:
+                                # Clean model name prefix if present
+                                model_name = m.name.replace("models/", "")
+                                available_models.append(model_name)
+                    except Exception:
+                        pass
+
+                    # Fallback list if listing models fails
+                    fallback_models = [
                         "gemini-1.5-flash",
+                        "gemini-1.5-flash-latest",
                         "gemini-1.5-pro",
+                        "gemini-1.5-pro-latest",
+                        "gemini-2.0-flash-exp",
+                        "gemini-2.5-flash"
                     ]
+
+                    # Prioritize dynamically discovered models, then fallbacks
+                    model_candidates = list(dict.fromkeys(available_models + fallback_models))
 
                     cot_prompt_text = "\n".join([f"- {ind}" for ind in selected_indicators])
 
