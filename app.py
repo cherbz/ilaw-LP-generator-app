@@ -249,4 +249,266 @@ def build_deped_ilaw_docx(header_data, content_dict):
         row = meta_table.rows[idx]
         cell_lbl, cell_val = row.cells[0], row.cells[1]
         cell_lbl.width = Inches(2.2)
-        cell_
+        cell_val.width = Inches(4.5)
+
+        set_cell_background(cell_lbl, "F2F4F8")
+
+        p_lbl = cell_lbl.paragraphs[0]
+        r_lbl = p_lbl.add_run(label)
+        r_lbl.bold = True
+        r_lbl.font.size = Pt(10)
+        r_lbl.font.color.rgb = RGBColor(0, 0, 0)
+
+        p_val = cell_val.paragraphs[0]
+        r_val = p_val.add_run(val)
+        r_val.font.size = Pt(10)
+        r_val.font.color.rgb = RGBColor(0, 0, 0)
+
+    doc.add_paragraph()
+
+    def add_section_table(section_title, rows_data):
+        h_p = doc.add_paragraph()
+        h_run = h_p.add_run(section_title)
+        h_run.bold = True
+        h_run.font.size = Pt(12)
+        h_run.font.color.rgb = RGBColor(15, 32, 67)
+
+        tbl = doc.add_table(rows=len(rows_data), cols=2)
+        tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+        cot_regex = re.compile(r"((?:📌|📌|\*|\+)?\s*\[COT INDICATOR:[^\]]+\])", re.IGNORECASE)
+
+        for r_idx, (lbl, text_content) in enumerate(rows_data):
+            row = tbl.rows[r_idx]
+            c_lbl, c_val = row.cells[0], row.cells[1]
+            c_lbl.width = Inches(2.2)
+            c_val.width = Inches(4.5)
+
+            set_cell_background(c_lbl, "EBF3FC")
+
+            p1 = c_lbl.paragraphs[0]
+            r1 = p1.add_run(lbl)
+            r1.bold = True
+            r1.font.size = Pt(10)
+            r1.font.color.rgb = RGBColor(0, 0, 0)
+
+            p2 = c_val.paragraphs[0]
+            clean_text = clean_math_syntax(text_content.strip())
+
+            lines = clean_text.split("\n")
+            for l_idx, line in enumerate(lines):
+                if l_idx > 0:
+                    p2 = c_val.add_paragraph()
+
+                segments = cot_regex.split(line)
+                for seg in segments:
+                    if not seg:
+                        continue
+                    if "[COT INDICATOR" in seg.upper():
+                        r_cot = p2.add_run(f" {seg.strip()} ")
+                        r_cot.bold = True
+                        r_cot.font.size = Pt(10)
+                        r_cot.font.color.rgb = RGBColor(0, 0, 0)
+                        r_cot.font.highlight_color = WD_COLOR_INDEX.YELLOW
+                    else:
+                        r_norm = p2.add_run(seg)
+                        r_norm.font.size = Pt(10)
+                        r_norm.font.color.rgb = RGBColor(0, 0, 0)
+                        r_norm.font.highlight_color = WD_COLOR_INDEX.AUTO
+
+        doc.add_paragraph()
+
+    # Section 1: INTENTIONS
+    add_section_table(
+        "1. INTENTIONS",
+        [
+            ("Learning Competency", content_dict.get("Learning Competency", "")),
+            ("Learning Objectives", content_dict.get("Learning Objectives", "")),
+            ("Learner Context", content_dict.get("Learner Context", "")),
+        ],
+    )
+
+    # Section 2: LEARNING EXPERIENCE
+    add_section_table(
+        "2. LEARNING EXPERIENCE",
+        [
+            ("Pre-Lesson (Getting Ready)", content_dict.get("Pre-Lesson", "")),
+            ("Instructional Flow & Direct Modeling", content_dict.get("Instructional Flow", "")),
+            ("Collaborative Group Activity", content_dict.get("Collaborative Group Activity", "")),
+            ("Synthesis & Resources", content_dict.get("Synthesis & Resources", "")),
+            ("Opportunities for Integration", content_dict.get("Opportunities for Integration", "")),
+        ],
+    )
+
+    # Section 3: ASSESSMENT
+    add_section_table(
+        "3. ASSESSMENT",
+        [("Formative Assessment (Individual Evaluation)", content_dict.get("Formative Assessment", ""))],
+    )
+
+    # Section 4: WAYS FORWARD
+    add_section_table(
+        "4. WAYS FORWARD",
+        [
+            ("Extended Learning Opportunities", content_dict.get("Extended Learning Opportunities", "")),
+            ("Teacher Reflections", content_dict.get("Teacher Reflections", "")),
+        ],
+    )
+
+    doc_buffer = io.BytesIO()
+    doc.save(doc_buffer)
+    doc_buffer.seek(0)
+    return doc_buffer
+
+
+# ==============================================================================
+# 5. GENERATION ENGINE & LICENSE CHECK
+# ==============================================================================
+
+st.divider()
+
+if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=True):
+    if not api_key:
+        st.error("Please enter a valid Gemini API Key in the sidebar.")
+    elif not license_key or not user_email:
+        st.warning("Please enter your registered Email and License Key.")
+    else:
+        # Validate license before proceeding
+        is_valid, msg = validate_and_claim_license(license_key, user_email)
+        if not is_valid:
+            st.error(msg)
+        else:
+            st.success(msg)
+            with st.spinner("Generating DepEd Order No. 003, s. 2026 (Annex A) ILAW Lesson Plan..."):
+                try:
+                    genai.configure(api_key=api_key.strip())
+
+                    model_candidates = [
+                        "gemini-2.5-flash",
+                        "gemini-1.5-flash",
+                        "gemini-1.5-pro",
+                    ]
+
+                    cot_prompt_text = "\n".join([f"- {ind}" for ind in selected_indicators])
+
+                    prompt = f"""
+                    You are an expert DepEd Instructional Designer. Create an official DepEd ILAW Lesson Plan adhering strictly to DepEd Order No. 003, s. 2026 (Annex A Template).
+
+                    CRITICAL PLACEMENT & FORMATTING RULES:
+                    1. DO NOT use LaTeX syntax or dollar signs ($) for mathematical formulas, functions, or variables. Write math in clean plain text.
+                    2. IMPORTANT FOR COT INDICATORS: Place each indicator tag strictly at the VERY END of the paragraph/text block that demonstrates it. NEVER place it in the middle of sentences or before descriptive text.
+                    3. Structure of COT Tag: Write explicitly as 📌 [COT INDICATOR: code: description] at the end of the text segment.
+
+                    HEADER DETAILS:
+                    - Teacher: {teacher_name} ({position_rank} - Stage: {stage_info['stage']})
+                    - Grade & Section: {grade_level} | Learning Area: {subject}
+                    - School Year: {school_year} | Sessions: {sessions}
+                    - Lesson Name/Topic: {topic}
+                    - References: {references}
+
+                    INPUTS:
+                    - Learning Competency: {learning_competency}
+                    - Learner Context: {learner_context}
+
+                    TARGET COT INDICATORS TO EMBED:
+                    {cot_prompt_text if cot_prompt_text else "Apply standard pedagogical strategies."}
+
+                    STRUCTURE OUTPUT USING ':::' AS DELIMITER:
+
+                    Learning Competency::: {learning_competency}
+                    Learning Objectives::: Provide 3 SMART objectives. Place COT indicator tags ONLY at the end of each objective. 📌 [COT INDICATOR: code: description]
+                    Learner Context::: Describe class context thoroughly. Place COT indicator tag ONLY at the end of the text. 📌 [COT INDICATOR: code: description]
+                    Pre-Lesson::: Write detailed warmup, review, and behavioral expectations. Place COT indicator tag ONLY at the end of the section. 📌 [COT INDICATOR: code: description]
+                    Instructional Flow::: Write detailed step-by-step direct instruction and ICT-assisted modeling. Place COT indicator tag ONLY at the end of the section. 📌 [COT INDICATOR: code: description]
+                    Collaborative Group Activity::: Write detailed differentiated group tasks across stations. Place COT indicator tag ONLY at the end of each station/activity description. 📌 [COT INDICATOR: code: description]
+                    Synthesis & Resources::: Write debriefing questions and instructional materials. Place COT indicator tag ONLY at the end. 📌 [COT INDICATOR: code: description]
+                    Opportunities for Integration::: Write cross-curricular integration details. Place COT indicator tag ONLY at the end. 📌 [COT INDICATOR: code: description]
+                    Formative Assessment::: Write detailed evaluation activity. Place COT indicator tag ONLY at the end. 📌 [COT INDICATOR: code: description]
+                    Extended Learning Opportunities::: Write homework or remedial tasks here.
+                    Teacher Reflections::: Write reflective notes on student performance and strategy effectiveness.
+                    """
+
+                    response = None
+                    successful_model = None
+                    last_error = None
+
+                    for model_name in model_candidates:
+                        try:
+                            model = genai.GenerativeModel(model_name)
+                            response = model.generate_content(prompt)
+                            successful_model = model_name
+                            break
+                        except Exception as err:
+                            last_error = err
+                            continue
+
+                    if response is None:
+                        raise Exception(f"Unable to generate content with provided key. Last error: {str(last_error)}")
+
+                    raw_text = clean_math_syntax(response.text)
+
+                    keys_list = [
+                        "Learning Competency",
+                        "Learning Objectives",
+                        "Learner Context",
+                        "Pre-Lesson",
+                        "Instructional Flow",
+                        "Collaborative Group Activity",
+                        "Synthesis & Resources",
+                        "Opportunities for Integration",
+                        "Formative Assessment",
+                        "Extended Learning Opportunities",
+                        "Teacher Reflections",
+                    ]
+
+                    parsed_content = {}
+                    for i, k in enumerate(keys_list):
+                        if i < len(keys_list) - 1:
+                            next_k = keys_list[i + 1]
+                            pattern = rf"{re.escape(k)}:::(.*?)(?={re.escape(next_k)}:::|$)"
+                        else:
+                            pattern = rf"{re.escape(k)}:::(.*)"
+
+                        match = re.search(pattern, raw_text, re.DOTALL)
+                        if match:
+                            parsed_content[k] = match.group(1).strip()
+                        else:
+                            parsed_content[k] = "N/A"
+
+                    header_info = {
+                        "topic": topic,
+                        "subject": subject,
+                        "teacher": teacher_name,
+                        "grade": grade_level,
+                        "sessions": sessions,
+                        "references": references,
+                    }
+
+                    st.success(f"Official DepEd ILAW Lesson Plan generated using model: `{successful_model}`!")
+
+                    # Streamlit UI Preview
+                    st.markdown(f"### ILAW LESSON PLAN ON {subject.upper()}\n*DepEd Order No. 003, s. 2026 (Annex A)*")
+                    for section_title, keys in [
+                        ("1. INTENTIONS", ["Learning Competency", "Learning Objectives", "Learner Context"]),
+                        ("2. LEARNING EXPERIENCE", ["Pre-Lesson", "Instructional Flow", "Collaborative Group Activity", "Synthesis & Resources", "Opportunities for Integration"]),
+                        ("3. ASSESSMENT", ["Formative Assessment"]),
+                        ("4. WAYS FORWARD", ["Extended Learning Opportunities", "Teacher Reflections"]),
+                    ]:
+                        st.markdown(f"#### {section_title}")
+                        for k in keys:
+                            if k in parsed_content:
+                                st.write(f"**{k}:** {parsed_content[k]}")
+
+                    # Build DOCX file
+                    doc_file = build_deped_ilaw_docx(header_info, parsed_content)
+
+                    st.download_button(
+                        label="📄 Download Official DepEd ILAW Lesson Plan (.docx)",
+                        data=doc_file,
+                        file_name=f"DepEd_ILAW_Lesson_Plan_{topic.replace(' ', '_')}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True,
+                    )
+
+                except Exception as e:
+                    st.error(f"Generation Error: {str(e)}")
