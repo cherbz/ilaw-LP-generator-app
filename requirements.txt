@@ -1,3 +1,6 @@
-git add requirements.txt
-git commit -m "Fix dependency resolution depth in requirements.txt"
-git push origin main
+fastapi>=0.100.0
+uvicorn[standard]>=0.20.0
+python-multipart>=0.0.6
+opencv-python-headless
+python-pptx
+pillow
