@@ -463,16 +463,26 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                     - DO NOT include internal thoughts, mental drafts, commentary, reasoning notes, or rules checking (e.g. DO NOT include '*Check formatting rules again:*' or '*Developing the Content*').
                     - Start your response IMMEDIATELY with 'Learning Competency:::' and proceed directly with the template data.
 
-                    CRITICAL RULE FOR OBJECTIVES:
-                    - DO NOT place any COT indicator tags in the 'Learning Objectives' section. Keep Learning Objectives purely focused on SMART learning goals.
+                    CRITICAL RULE FOR OBJECTIVES (1, 2, 3 - COGNITIVE, AFFECTIVE, PSYCHOMOTOR):
+                    - For EACH session (or overall if 1 session), format 'Learning Objectives' strictly as 3 numbered points covering:
+                      1. Cognitive (Knowledge / Understanding domain)
+                      2. Affective (Values / Appreciation / Attitude domain)
+                      3. Psychomotor (Skills / Performance domain)
+                    - Example for Multi-Session:
+                      Session 1:
+                      1. [Cognitive Objective]
+                      2. [Affective Objective]
+                      3. [Psychomotor Objective]
+                      Session 2:
+                      1. [Cognitive Objective]
+                      2. [Affective Objective]
+                      3. [Psychomotor Objective]
+                    - DO NOT place any COT indicator tags in 'Learning Objectives'.
 
                     CRITICAL MULTI-SESSION INSTRUCTION:
                     - Total Sessions Specified: {sessions}
                     - When Total Sessions is greater than 1 (e.g., 3), write out distinct session paragraphs for 'Learning Objectives', 'Pre-Lesson', 'Instructional Flow', 'Collaborative Group Activity', 'Synthesis & Resources', and 'Formative Assessment'.
-                    - Structure each session paragraph clearly on a new line as:
-                      Session 1: [Detailed activity/objective...]
-                      Session 2: [Detailed activity/objective...]
-                      Session 3: [Detailed activity/objective...]
+                    - Structure each session section clearly on separate lines for Session 1:, Session 2:, etc.
 
                     CRITICAL AUTOMATIC LEARNER CONTEXT INSTRUCTION:
                     - Automatically generate a detailed, realistic 'Learner Context' tailored specifically for Grade Level/Section: '{grade_level}', Subject: '{subject}', and Topic: '{topic}'. Include a COT indicator tag at the end.
@@ -497,7 +507,7 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                     STRUCTURE OUTPUT USING ':::' AS DELIMITER:
 
                     Learning Competency::: {learning_competency}
-                    Learning Objectives::: Write Session 1:, Session 2:, etc., SMART objectives without any COT indicator tags.
+                    Learning Objectives::: Write 1. Cognitive, 2. Affective, and 3. Psychomotor objectives for each session without any COT indicator tags.
                     Learner Context::: Provide the automatically generated learner context. 📌 [COT INDICATOR: code: description]
                     Pre-Lesson::: Write detailed warmup/review for Session 1:, Session 2:, etc., on separate lines with COT tags at the end of each.
                     Instructional Flow::: Write detailed instruction/modeling for Session 1:, Session 2:, etc., on separate lines with COT tags at the end of each.
@@ -526,7 +536,6 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                     if response is None:
                         raise Exception(f"Unable to generate content with provided key. Last error: {str(last_error)}")
 
-                    # Apply regex cleaning to remove any residual internal commentary
                     raw_text = clean_math_syntax(response.text)
 
                     keys_list = [
