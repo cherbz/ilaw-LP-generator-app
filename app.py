@@ -155,7 +155,7 @@ with col1:
 
 with col2:
     school_year = st.text_input("School Year", "2025-2026")
-    sessions = st.text_input("No. of Sessions", "3")
+    sessions = st.text_input("No. of Sessions", "1")
 
 with col3:
     topic = st.text_input("Name of Lesson / Topic", "Demand and Suplay")
@@ -181,7 +181,7 @@ learning_competency = st.text_area(
 )
 
 # ==============================================================================
-# 4. DOCX CLONING HELPER FUNCTIONS (MATCHING CAMBRIA & SCREENSHOT STYLING)
+# 4. DOCX CLONING HELPER FUNCTIONS (LONG BOND PAPER 8.5 x 13 INCHES & 2-PAGE LAYOUT)
 # ==============================================================================
 
 def clean_math_syntax(text: str) -> str:
@@ -203,8 +203,8 @@ def set_cell_background(cell, hex_color):
     shd = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{hex_color}"/>')
     tcPr.append(shd)
 
-def set_cell_margins(cell, top=80, bottom=80, left=120, right=120):
-    """Sets internal padding for table cells."""
+def set_cell_margins(cell, top=40, bottom=40, left=100, right=100):
+    """Sets compact internal padding for table cells."""
     tcPr = cell._element.get_or_add_tcPr()
     tcMar = parse_xml(
         f'<w:tcMar {nsdecls("w")}>\n'
@@ -233,34 +233,45 @@ def remove_table_borders(table):
         tblPr[0].append(borders)
 
 def build_deped_ilaw_docx(header_data, content_dict):
-    """Clones the exact layout, font, sizes, and highlights from target document."""
+    """Builds DOCX configured for Long Bond Paper (8.5 x 13 inches) fitting 2 pages for 1 session."""
     doc = docx.Document()
 
-    # Set document margins
-    for s in doc.sections:
-        s.top_margin = Inches(0.8)
-        s.bottom_margin = Inches(0.8)
-        s.left_margin = Inches(0.8)
-        s.right_margin = Inches(0.8)
+    is_single_session = str(header_data.get("sessions", "1")).strip() == "1"
 
-    # Document Title Banner
+    # Configure Long Bond Paper (8.5 x 13 inches)
+    for s in doc.sections:
+        s.page_width = Inches(8.5)
+        s.page_height = Inches(13.0)
+        
+        # Compact 0.5-inch margins for 1 session to strictly fit within 2 pages
+        if is_single_session:
+            s.top_margin = Inches(0.5)
+            s.bottom_margin = Inches(0.5)
+            s.left_margin = Inches(0.5)
+            s.right_margin = Inches(0.5)
+        else:
+            s.top_margin = Inches(0.75)
+            s.bottom_margin = Inches(0.75)
+            s.left_margin = Inches(0.75)
+            s.right_margin = Inches(0.75)
+
+    # Title Banner
     p_title = doc.add_paragraph()
     p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_title.paragraph_format.space_before = Pt(0)
     p_title.paragraph_format.space_after = Pt(2)
 
     run_title = p_title.add_run(f"ILAW LESSON PLAN ON {clean_math_syntax(header_data['subject']).upper()}\n")
     run_title.font.name = "Cambria"
     run_title.bold = True
-    run_title.font.size = Pt(16)
+    run_title.font.size = Pt(14 if is_single_session else 16)
     run_title.font.color.rgb = RGBColor(15, 32, 67)
 
     run_sub = p_title.add_run("DepEd Order No. 003, s. 2026 (Annex A Template) | COT Indicators Embedded")
     run_sub.font.name = "Cambria"
-    run_sub.font.size = Pt(10)
+    run_sub.font.size = Pt(9.5)
     run_sub.font.italic = True
     run_sub.font.color.rgb = RGBColor(100, 100, 100)
-
-    doc.add_paragraph()
 
     # Metadata Table
     meta_table = doc.add_table(rows=7, cols=2)
@@ -280,39 +291,40 @@ def build_deped_ilaw_docx(header_data, content_dict):
     for idx, (label, val) in enumerate(meta_data):
         row = meta_table.rows[idx]
         cell_lbl, cell_val = row.cells[0], row.cells[1]
-        cell_lbl.width = Inches(2.2)
-        cell_val.width = Inches(4.5)
+        cell_lbl.width = Inches(2.3)
+        cell_val.width = Inches(5.2 if is_single_session else 4.7)
 
         set_cell_background(cell_lbl, "F2F4F8")
-        set_cell_margins(cell_lbl, top=80, bottom=80, left=120, right=120)
-        set_cell_margins(cell_val, top=80, bottom=80, left=120, right=120)
+        set_cell_margins(cell_lbl, top=30 if is_single_session else 60, bottom=30 if is_single_session else 60, left=100, right=100)
+        set_cell_margins(cell_val, top=30 if is_single_session else 60, bottom=30 if is_single_session else 60, left=100, right=100)
 
         p_lbl = cell_lbl.paragraphs[0]
-        p_lbl.paragraph_format.space_after = Pt(2)
+        p_lbl.paragraph_format.space_after = Pt(1)
+        p_lbl.paragraph_format.space_before = Pt(0)
         r_lbl = p_lbl.add_run(label)
         r_lbl.font.name = "Cambria"
         r_lbl.bold = True
-        r_lbl.font.size = Pt(10)
+        r_lbl.font.size = Pt(9.5)
         r_lbl.font.color.rgb = RGBColor(0, 0, 0)
 
         p_val = cell_val.paragraphs[0]
-        p_val.paragraph_format.space_after = Pt(2)
+        p_val.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        p_val.paragraph_format.space_after = Pt(1)
+        p_val.paragraph_format.space_before = Pt(0)
         r_val = p_val.add_run(val)
         r_val.font.name = "Cambria"
-        r_val.font.size = Pt(10)
+        r_val.font.size = Pt(9.5)
         r_val.font.color.rgb = RGBColor(0, 0, 0)
-
-    doc.add_paragraph()
 
     # Section Table Generator
     def add_section_table(section_title, rows_data):
         h_p = doc.add_paragraph()
-        h_p.paragraph_format.space_before = Pt(10)
-        h_p.paragraph_format.space_after = Pt(4)
+        h_p.paragraph_format.space_before = Pt(4 if is_single_session else 8)
+        h_p.paragraph_format.space_after = Pt(2)
         h_run = h_p.add_run(section_title)
         h_run.font.name = "Cambria"
         h_run.bold = True
-        h_run.font.size = Pt(12)
+        h_run.font.size = Pt(11)
         h_run.font.color.rgb = RGBColor(15, 32, 67)
 
         tbl = doc.add_table(rows=len(rows_data), cols=2)
@@ -324,24 +336,26 @@ def build_deped_ilaw_docx(header_data, content_dict):
         for r_idx, (lbl, text_content) in enumerate(rows_data):
             row = tbl.rows[r_idx]
             c_lbl, c_val = row.cells[0], row.cells[1]
-            c_lbl.width = Inches(2.2)
-            c_val.width = Inches(4.5)
+            c_lbl.width = Inches(2.3)
+            c_val.width = Inches(5.2 if is_single_session else 4.7)
 
             set_cell_background(c_lbl, "EBF3FC")
-            set_cell_margins(c_lbl, top=80, bottom=80, left=120, right=120)
-            set_cell_margins(c_val, top=80, bottom=80, left=120, right=120)
+            set_cell_margins(c_lbl, top=40 if is_single_session else 60, bottom=40 if is_single_session else 60, left=100, right=100)
+            set_cell_margins(c_val, top=40 if is_single_session else 60, bottom=40 if is_single_session else 60, left=100, right=100)
 
             p1 = c_lbl.paragraphs[0]
-            p1.paragraph_format.space_after = Pt(2)
+            p1.paragraph_format.space_after = Pt(1)
+            p1.paragraph_format.space_before = Pt(0)
             r1 = p1.add_run(lbl)
             r1.font.name = "Cambria"
             r1.bold = True
-            r1.font.size = Pt(10)
+            r1.font.size = Pt(9.5)
             r1.font.color.rgb = RGBColor(0, 0, 0)
 
             p2 = c_val.paragraphs[0]
             p2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-            p2.paragraph_format.space_after = Pt(4)
+            p2.paragraph_format.space_after = Pt(2)
+            p2.paragraph_format.space_before = Pt(0)
             clean_text = clean_math_syntax(text_content.strip())
 
             lines = clean_text.split("\n")
@@ -351,7 +365,8 @@ def build_deped_ilaw_docx(header_data, content_dict):
                 if l_idx > 0:
                     p2 = c_val.add_paragraph()
                     p2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-                    p2.paragraph_format.space_after = Pt(4)
+                    p2.paragraph_format.space_after = Pt(2)
+                    p2.paragraph_format.space_before = Pt(0)
 
                 segments = cot_regex.split(line)
                 for seg in segments:
@@ -361,17 +376,15 @@ def build_deped_ilaw_docx(header_data, content_dict):
                         r_cot = p2.add_run(f" {seg.strip()} ")
                         r_cot.font.name = "Cambria"
                         r_cot.bold = True
-                        r_cot.font.size = Pt(10)
+                        r_cot.font.size = Pt(9.5)
                         r_cot.font.color.rgb = RGBColor(0, 0, 0)
                         r_cot.font.highlight_color = WD_COLOR_INDEX.YELLOW
                     else:
                         r_norm = p2.add_run(seg)
                         r_norm.font.name = "Cambria"
-                        r_norm.font.size = Pt(10)
+                        r_norm.font.size = Pt(9.5)
                         r_norm.font.color.rgb = RGBColor(0, 0, 0)
                         r_norm.font.highlight_color = WD_COLOR_INDEX.AUTO
-
-        doc.add_paragraph()
 
     # Section 1: INTENTIONS
     add_section_table(
@@ -465,26 +478,16 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                     - DO NOT include internal thoughts, mental drafts, commentary, reasoning notes, or rules checking (e.g. DO NOT include '*Check formatting rules again:*' or '*Developing the Content*').
                     - Start your response IMMEDIATELY with 'Learning Competency:::' and proceed directly with the template data.
 
+                    CRITICAL CONCISE LENGTH RULE (FOR 1 SESSION):
+                    - Total Sessions Specified: {sessions}
+                    - IF Total Sessions is 1: Keep explanations thorough yet concise so that the entire lesson plan will fit strictly onto EXACTLY 2 PAGES when formatted in Microsoft Word (Long Bond Paper, 8.5 x 13 inches). Avoid unnecessary padding.
+
                     CRITICAL RULE FOR OBJECTIVES (1, 2, 3 - COGNITIVE, AFFECTIVE, PSYCHOMOTOR):
                     - For EACH session (or overall if 1 session), format 'Learning Objectives' strictly as 3 numbered points covering:
                       1. Cognitive (Knowledge / Understanding domain)
                       2. Affective (Values / Appreciation / Attitude domain)
                       3. Psychomotor (Skills / Performance domain)
-                    - Example for Multi-Session:
-                      Session 1:
-                      1. [Cognitive Objective]
-                      2. [Affective Objective]
-                      3. [Psychomotor Objective]
-                      Session 2:
-                      1. [Cognitive Objective]
-                      2. [Affective Objective]
-                      3. [Psychomotor Objective]
                     - DO NOT place any COT indicator tags in 'Learning Objectives'.
-
-                    CRITICAL MULTI-SESSION INSTRUCTION:
-                    - Total Sessions Specified: {sessions}
-                    - When Total Sessions is greater than 1 (e.g., 3), write out distinct session paragraphs for 'Learning Objectives', 'Pre-Lesson', 'Instructional Flow', 'Collaborative Group Activity', 'Synthesis & Resources', and 'Formative Assessment'.
-                    - Structure each session section clearly on separate lines for Session 1:, Session 2:, etc.
 
                     CRITICAL AUTOMATIC LEARNER CONTEXT INSTRUCTION:
                     - Automatically generate a detailed, realistic 'Learner Context' tailored specifically for Grade Level/Section: '{grade_level}', Subject: '{subject}', and Topic: '{topic}'. Include a COT indicator tag at the end.
@@ -509,14 +512,14 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                     STRUCTURE OUTPUT USING ':::' AS DELIMITER:
 
                     Learning Competency::: {learning_competency}
-                    Learning Objectives::: Write 1. Cognitive, 2. Affective, and 3. Psychomotor objectives for each session without any COT indicator tags.
+                    Learning Objectives::: Write 1. Cognitive, 2. Affective, and 3. Psychomotor objectives without any COT indicator tags.
                     Learner Context::: Provide the automatically generated learner context. 📌 [COT INDICATOR: code: description]
-                    Pre-Lesson::: Write detailed warmup/review for Session 1:, Session 2:, etc., on separate lines with COT tags at the end of each.
-                    Instructional Flow::: Write detailed instruction/modeling for Session 1:, Session 2:, etc., on separate lines with COT tags at the end of each.
-                    Collaborative Group Activity::: Write detailed group activities for Session 1:, Session 2:, etc., on separate lines with COT tags at the end of each.
-                    Synthesis & Resources::: Write debriefing questions for Session 1:, Session 2:, etc., on separate lines with COT tags at the end of each.
+                    Pre-Lesson::: Write warmup/review with COT tags at the end.
+                    Instructional Flow::: Write instruction/modeling with COT tags at the end.
+                    Collaborative Group Activity::: Write group activities with COT tags at the end.
+                    Synthesis & Resources::: Write debriefing questions with COT tags at the end.
                     Opportunities for Integration::: Write cross-curricular linkages. 📌 [COT INDICATOR: code: description]
-                    Formative Assessment::: Write evaluation tasks for Session 1:, Session 2:, etc., on separate lines with COT tags at the end of each.
+                    Formative Assessment::: Write evaluation tasks with COT tags at the end.
                     Extended Learning Opportunities::: Write homework or remedial tasks here.
                     Teacher Reflections::: Write reflective notes on student performance.
                     """
