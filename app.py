@@ -4,8 +4,8 @@ import json
 import docx
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
-from docx.oxml import OxmlElement, parse_xml
-from docx.oxml.ns import qn, nsdecls
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
 from docx.shared import Inches, Pt, RGBColor
 import google.generativeai as genai
 import firebase_admin
@@ -139,7 +139,7 @@ with st.sidebar:
 
     st.divider()
     st.header("👤 Teacher Profile & Position")
-    teacher_name = st.text_input("Teacher Name", "NORBERTO P. BINONDO JR.")
+    teacher_name = st.text_input("Teacher Name", "JUAN DELA CRUZ")
     position_rank = st.selectbox("Position / Rank", list(CAREER_STAGES.keys()), index=2)
 
     stage_info = CAREER_STAGES[position_rank]
@@ -185,15 +185,17 @@ learning_competency = st.text_area(
 # ==============================================================================
 
 def clean_math_syntax(text: str) -> str:
-    """Removes LaTeX dollar signs ($) and cleans math formatting."""
-    cleaned = re.sub(r"\$+", "", text)
+    """Removes LaTeX dollar signs ($) and cleans math/internal reasoning commentary."""
+    cleaned = re.sub(r"\*+.*?\*+", "", text, flags=re.DOTALL)
+    cleaned = re.sub(r"\(Mental draft.*?\)", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+    cleaned = re.sub(r"\$+", "", cleaned)
     cleaned = (
         cleaned.replace("\\", "")
         .replace("angle", "∠")
         .replace("circ", "°")
         .replace("&", "&")
     )
-    return cleaned
+    return cleaned.strip()
 
 def set_cell_background(cell, hex_color):
     """Sets cell background fill."""
@@ -201,7 +203,7 @@ def set_cell_background(cell, hex_color):
     shd = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{hex_color}"/>')
     tcPr.append(shd)
 
-def set_cell_margins(cell, top=100, bottom=100, left=150, right=150):
+def set_cell_margins(cell, top=80, bottom=80, left=120, right=120):
     """Sets internal padding for table cells."""
     tcPr = cell._element.get_or_add_tcPr()
     tcMar = parse_xml(
@@ -231,7 +233,7 @@ def remove_table_borders(table):
         tblPr[0].append(borders)
 
 def build_deped_ilaw_docx(header_data, content_dict):
-    """Clones the exact layout, font, sizes, and highlights from screenshot_25d570.jpg."""
+    """Clones the exact layout, font, sizes, and highlights from target document."""
     doc = docx.Document()
 
     # Set document margins
@@ -343,6 +345,8 @@ def build_deped_ilaw_docx(header_data, content_dict):
 
             lines = clean_text.split("\n")
             for l_idx, line in enumerate(lines):
+                if not line.strip():
+                    continue
                 if l_idx > 0:
                     p2 = c_val.add_paragraph()
                     p2.paragraph_format.space_after = Pt(4)
@@ -422,7 +426,6 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
     elif not license_key or not user_email:
         st.warning("Please enter your registered Email and License Key.")
     else:
-        # Validate license before proceeding
         is_valid, msg = validate_and_claim_license(license_key, user_email)
         if not is_valid:
             st.error(msg)
@@ -432,7 +435,6 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                 try:
                     genai.configure(api_key=api_key.strip())
 
-                    # Dynamic model selection
                     available_models = []
                     try:
                         for m in genai.list_models():
@@ -457,20 +459,27 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                     prompt = f"""
                     You are an expert DepEd Instructional Designer. Create an official DepEd ILAW Lesson Plan adhering strictly to DepEd Order No. 003, s. 2026 (Annex A Template).
 
+                    STRICT NO-INTERNAL-THOUGHTS RULE:
+                    - DO NOT include internal thoughts, mental drafts, commentary, reasoning notes, or rules checking (e.g. DO NOT include '*Check formatting rules again:*' or '*Developing the Content*').
+                    - Start your response IMMEDIATELY with 'Learning Competency:::' and proceed directly with the template data.
+
+                    CRITICAL RULE FOR OBJECTIVES:
+                    - DO NOT place any COT indicator tags in the 'Learning Objectives' section. Keep Learning Objectives purely focused on SMART learning goals.
+
                     CRITICAL MULTI-SESSION INSTRUCTION:
                     - Total Sessions Specified: {sessions}
                     - When Total Sessions is greater than 1 (e.g., 3), write out distinct session paragraphs for 'Learning Objectives', 'Pre-Lesson', 'Instructional Flow', 'Collaborative Group Activity', 'Synthesis & Resources', and 'Formative Assessment'.
                     - Structure each session paragraph clearly on a new line as:
-                      Session 1: [Detailed activity/objective...] 📌 [COT INDICATOR: code: description]
-                      Session 2: [Detailed activity/objective...] 📌 [COT INDICATOR: code: description]
-                      Session 3: [Detailed activity/objective...] 📌 [COT INDICATOR: code: description]
+                      Session 1: [Detailed activity/objective...]
+                      Session 2: [Detailed activity/objective...]
+                      Session 3: [Detailed activity/objective...]
 
                     CRITICAL AUTOMATIC LEARNER CONTEXT INSTRUCTION:
                     - Automatically generate a detailed, realistic 'Learner Context' tailored specifically for Grade Level/Section: '{grade_level}', Subject: '{subject}', and Topic: '{topic}'. Include a COT indicator tag at the end.
 
-                    CRITICAL FORMATTING RULES:
+                    CRITICAL FORMATTING RULES FOR OTHER SECTIONS:
                     1. DO NOT use LaTeX syntax or dollar signs ($) for mathematical formulas or variables. Write plain text.
-                    2. IMPORTANT FOR COT INDICATORS: Place each indicator tag strictly at the VERY END of the sentence/paragraph that demonstrates it. Write as 📌 [COT INDICATOR: code: description]
+                    2. IMPORTANT FOR COT INDICATORS: Embed selected COT indicators ONLY inside 'Learner Context', 'Pre-Lesson', 'Instructional Flow', 'Collaborative Group Activity', 'Synthesis & Resources', 'Opportunities for Integration', and 'Formative Assessment'. Place each indicator tag strictly at the VERY END of the sentence/paragraph that demonstrates it. Write as 📌 [COT INDICATOR: code: description]
 
                     HEADER DETAILS:
                     - Teacher: {teacher_name} ({position_rank} - Stage: {stage_info['stage']})
@@ -488,7 +497,7 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                     STRUCTURE OUTPUT USING ':::' AS DELIMITER:
 
                     Learning Competency::: {learning_competency}
-                    Learning Objectives::: Write Session 1:, Session 2:, etc., SMART objectives. End each session line with a COT tag.
+                    Learning Objectives::: Write Session 1:, Session 2:, etc., SMART objectives without any COT indicator tags.
                     Learner Context::: Provide the automatically generated learner context. 📌 [COT INDICATOR: code: description]
                     Pre-Lesson::: Write detailed warmup/review for Session 1:, Session 2:, etc., on separate lines with COT tags at the end of each.
                     Instructional Flow::: Write detailed instruction/modeling for Session 1:, Session 2:, etc., on separate lines with COT tags at the end of each.
@@ -517,6 +526,7 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                     if response is None:
                         raise Exception(f"Unable to generate content with provided key. Last error: {str(last_error)}")
 
+                    # Apply regex cleaning to remove any residual internal commentary
                     raw_text = clean_math_syntax(response.text)
 
                     keys_list = [
@@ -543,7 +553,7 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
 
                         match = re.search(pattern, raw_text, re.DOTALL)
                         if match:
-                            parsed_content[k] = match.group(1).strip()
+                            parsed_content[k] = clean_math_syntax(match.group(1).strip())
                         else:
                             parsed_content[k] = "N/A"
 
