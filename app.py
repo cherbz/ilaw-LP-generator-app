@@ -340,6 +340,7 @@ def build_deped_ilaw_docx(header_data, content_dict):
             r1.font.color.rgb = RGBColor(0, 0, 0)
 
             p2 = c_val.paragraphs[0]
+            p2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
             p2.paragraph_format.space_after = Pt(4)
             clean_text = clean_math_syntax(text_content.strip())
 
@@ -349,6 +350,7 @@ def build_deped_ilaw_docx(header_data, content_dict):
                     continue
                 if l_idx > 0:
                     p2 = c_val.add_paragraph()
+                    p2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
                     p2.paragraph_format.space_after = Pt(4)
 
                 segments = cot_regex.split(line)
