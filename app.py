@@ -198,14 +198,24 @@ def clean_math_syntax(text: str) -> str:
 def set_cell_background(cell, hex_color):
     """Sets cell background fill."""
     tcPr = cell._element.get_or_add_tcPr()
-    shd = OxmlElement("w:shd")
-    shd.set(qn("w:val"), "clear")
-    shd.set(qn("w:color"), "auto")
-    shd.set(qn("w:fill"), hex_color)
+    shd = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{hex_color}"/>')
     tcPr.append(shd)
 
+def set_cell_margins(cell, top=100, bottom=100, left=150, right=150):
+    """Sets internal padding for table cells."""
+    tcPr = cell._element.get_or_add_tcPr()
+    tcMar = parse_xml(
+        f'<w:tcMar {nsdecls("w")}>\n'
+        f'  <w:top w:w="{top}" w:type="dxa"/>\n'
+        f'  <w:bottom w:w="{bottom}" w:type="dxa"/>\n'
+        f'  <w:left w:w="{left}" w:type="dxa"/>\n'
+        f'  <w:right w:w="{right}" w:type="dxa"/>\n'
+        f'</w:tcMar>'
+    )
+    tcPr.append(tcMar)
+
 def remove_table_borders(table):
-    """Removes outer and inner borders from Word tables to match exact screenshot layout."""
+    """Removes outer and inner borders from Word tables."""
     tblPr = table._element.xpath('w:tblPr')
     if tblPr:
         borders = parse_xml(
@@ -234,6 +244,8 @@ def build_deped_ilaw_docx(header_data, content_dict):
     # Document Title Banner
     p_title = doc.add_paragraph()
     p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_title.paragraph_format.space_after = Pt(2)
+
     run_title = p_title.add_run(f"ILAW LESSON PLAN ON {clean_math_syntax(header_data['subject']).upper()}\n")
     run_title.font.name = "Cambria"
     run_title.bold = True
@@ -270,9 +282,11 @@ def build_deped_ilaw_docx(header_data, content_dict):
         cell_val.width = Inches(4.5)
 
         set_cell_background(cell_lbl, "F2F4F8")
+        set_cell_margins(cell_lbl, top=80, bottom=80, left=120, right=120)
+        set_cell_margins(cell_val, top=80, bottom=80, left=120, right=120)
 
         p_lbl = cell_lbl.paragraphs[0]
-        p_lbl.paragraph_format.space_after = Pt(4)
+        p_lbl.paragraph_format.space_after = Pt(2)
         r_lbl = p_lbl.add_run(label)
         r_lbl.font.name = "Cambria"
         r_lbl.bold = True
@@ -280,7 +294,7 @@ def build_deped_ilaw_docx(header_data, content_dict):
         r_lbl.font.color.rgb = RGBColor(0, 0, 0)
 
         p_val = cell_val.paragraphs[0]
-        p_val.paragraph_format.space_after = Pt(4)
+        p_val.paragraph_format.space_after = Pt(2)
         r_val = p_val.add_run(val)
         r_val.font.name = "Cambria"
         r_val.font.size = Pt(10)
@@ -291,7 +305,7 @@ def build_deped_ilaw_docx(header_data, content_dict):
     # Section Table Generator
     def add_section_table(section_title, rows_data):
         h_p = doc.add_paragraph()
-        h_p.paragraph_format.space_before = Pt(8)
+        h_p.paragraph_format.space_before = Pt(10)
         h_p.paragraph_format.space_after = Pt(4)
         h_run = h_p.add_run(section_title)
         h_run.font.name = "Cambria"
@@ -312,9 +326,11 @@ def build_deped_ilaw_docx(header_data, content_dict):
             c_val.width = Inches(4.5)
 
             set_cell_background(c_lbl, "EBF3FC")
+            set_cell_margins(c_lbl, top=80, bottom=80, left=120, right=120)
+            set_cell_margins(c_val, top=80, bottom=80, left=120, right=120)
 
             p1 = c_lbl.paragraphs[0]
-            p1.paragraph_format.space_after = Pt(4)
+            p1.paragraph_format.space_after = Pt(2)
             r1 = p1.add_run(lbl)
             r1.font.name = "Cambria"
             r1.bold = True
@@ -443,10 +459,14 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
 
                     CRITICAL MULTI-SESSION INSTRUCTION:
                     - Total Sessions Specified: {sessions}
-                    - You MUST explicitly structure 'Learning Objectives', 'Pre-Lesson', 'Instructional Flow', 'Collaborative Group Activity', 'Synthesis & Resources', and 'Formative Assessment' session-by-session as 'Session 1:', 'Session 2:', up to 'Session {sessions}:'.
+                    - When Total Sessions is greater than 1 (e.g., 3), write out distinct session paragraphs for 'Learning Objectives', 'Pre-Lesson', 'Instructional Flow', 'Collaborative Group Activity', 'Synthesis & Resources', and 'Formative Assessment'.
+                    - Structure each session paragraph clearly on a new line as:
+                      Session 1: [Detailed activity/objective...] 📌 [COT INDICATOR: code: description]
+                      Session 2: [Detailed activity/objective...] 📌 [COT INDICATOR: code: description]
+                      Session 3: [Detailed activity/objective...] 📌 [COT INDICATOR: code: description]
 
                     CRITICAL AUTOMATIC LEARNER CONTEXT INSTRUCTION:
-                    - Automatically generate a detailed, realistic 'Learner Context' tailored specifically for Grade Level/Section: '{grade_level}', Subject: '{subject}', and Topic: '{topic}'. Include a COT indicator at the end.
+                    - Automatically generate a detailed, realistic 'Learner Context' tailored specifically for Grade Level/Section: '{grade_level}', Subject: '{subject}', and Topic: '{topic}'. Include a COT indicator tag at the end.
 
                     CRITICAL FORMATTING RULES:
                     1. DO NOT use LaTeX syntax or dollar signs ($) for mathematical formulas or variables. Write plain text.
@@ -468,14 +488,14 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                     STRUCTURE OUTPUT USING ':::' AS DELIMITER:
 
                     Learning Competency::: {learning_competency}
-                    Learning Objectives::: Write Session 1:, Session 2:, etc., SMART objectives. End each with a COT indicator tag. 📌 [COT INDICATOR: code: description]
+                    Learning Objectives::: Write Session 1:, Session 2:, etc., SMART objectives. End each session line with a COT tag.
                     Learner Context::: Provide the automatically generated learner context. 📌 [COT INDICATOR: code: description]
-                    Pre-Lesson::: Write detailed warmup/review for Session 1:, Session 2:, etc. 📌 [COT INDICATOR: code: description]
-                    Instructional Flow::: Write detailed instruction/modeling for Session 1:, Session 2:, etc. 📌 [COT INDICATOR: code: description]
-                    Collaborative Group Activity::: Write detailed group activities for Session 1:, Session 2:, etc. 📌 [COT INDICATOR: code: description]
-                    Synthesis & Resources::: Write debriefing questions for Session 1:, Session 2:, etc. 📌 [COT INDICATOR: code: description]
+                    Pre-Lesson::: Write detailed warmup/review for Session 1:, Session 2:, etc., on separate lines with COT tags at the end of each.
+                    Instructional Flow::: Write detailed instruction/modeling for Session 1:, Session 2:, etc., on separate lines with COT tags at the end of each.
+                    Collaborative Group Activity::: Write detailed group activities for Session 1:, Session 2:, etc., on separate lines with COT tags at the end of each.
+                    Synthesis & Resources::: Write debriefing questions for Session 1:, Session 2:, etc., on separate lines with COT tags at the end of each.
                     Opportunities for Integration::: Write cross-curricular linkages. 📌 [COT INDICATOR: code: description]
-                    Formative Assessment::: Write evaluation tasks for Session 1:, Session 2:, etc. 📌 [COT INDICATOR: code: description]
+                    Formative Assessment::: Write evaluation tasks for Session 1:, Session 2:, etc., on separate lines with COT tags at the end of each.
                     Extended Learning Opportunities::: Write homework or remedial tasks here.
                     Teacher Reflections::: Write reflective notes on student performance.
                     """
