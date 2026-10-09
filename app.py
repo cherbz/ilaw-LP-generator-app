@@ -138,9 +138,9 @@ CAREER_STAGES = {
 # 3. STREAMLIT APP LAYOUT
 # ==============================================================================
 
-st.set_page_config(page_title="Binonz ILAW Lesson Plan Generator", page_icon="📝", layout="wide")
+st.set_page_config(page_title="NBJ ILAW Lesson Plan Generator", page_icon="📝", layout="wide")
 
-st.title("💡 Binonz ILAW Lesson Plan Generator")
+st.title("💡 NBJ ILAW Lesson Plan Generator")
 st.caption("DepEd Order No. 003, s. 2026 (Annex A Template) | Automated Rank-Based COT Indicator Embedding")
 
 # SIDEBAR: CREDENTIALS & TEACHER PROFILE
