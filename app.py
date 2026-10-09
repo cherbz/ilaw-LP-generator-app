@@ -4,8 +4,8 @@ import json
 import docx
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
+from docx.oxml import OxmlElement, parse_xml
+from docx.oxml.ns import qn, nsdecls
 from docx.shared import Inches, Pt, RGBColor
 import google.generativeai as genai
 import firebase_admin
@@ -36,10 +36,7 @@ def init_firebase():
 db = init_firebase()
 
 def validate_and_claim_license(license_key, email_input):
-    """
-    Validates license key in Firestore.
-    Checks for empty inputs FIRST to prevent path errors.
-    """
+    """Validates license key in Firestore safely."""
     key = license_key.strip() if license_key else ""
     email = email_input.strip() if email_input else ""
 
@@ -154,14 +151,14 @@ col1, col2, col3 = st.columns(3)
 
 with col1:
     grade_level = st.text_input("Grade Level & Section", "Grade 9 - Kindness")
-    subject = st.text_input("Learning Area", "Mathematics")
+    subject = st.text_input("Learning Area", "Araling Panlipunan")
 
 with col2:
     school_year = st.text_input("School Year", "2025-2026")
-    sessions = st.text_input("No. of Sessions", "1")
+    sessions = st.text_input("No. of Sessions", "3")
 
 with col3:
-    topic = st.text_input("Name of Lesson / Topic", "Graphing Linear Functions")
+    topic = st.text_input("Name of Lesson / Topic", "Demand and Suplay")
     references = st.text_input("References", "DepEd Curriculum Guide & Presentation Slides")
 
 st.divider()
@@ -180,11 +177,11 @@ st.divider()
 st.subheader("3. Learning Objectives")
 learning_competency = st.text_area(
     "Learning Competency",
-    "Graphs a linear function and values its real-life applications (domain, range, intercepts, and slope).",
+    "Nasusuri ang interaksyon ng demand at suplay at implikasyon nito sa kalagayan ng presyo at ng pamilihan.",
 )
 
 # ==============================================================================
-# 4. HELPER FUNCTIONS TO CLEAN MATH & BUILD DOCX
+# 4. DOCX CLONING HELPER FUNCTIONS (MATCHING CAMBRIA & SCREENSHOT STYLING)
 # ==============================================================================
 
 def clean_math_syntax(text: str) -> str:
@@ -199,6 +196,7 @@ def clean_math_syntax(text: str) -> str:
     return cleaned
 
 def set_cell_background(cell, hex_color):
+    """Sets cell background fill."""
     tcPr = cell._element.get_or_add_tcPr()
     shd = OxmlElement("w:shd")
     shd.set(qn("w:val"), "clear")
@@ -206,25 +204,44 @@ def set_cell_background(cell, hex_color):
     shd.set(qn("w:fill"), hex_color)
     tcPr.append(shd)
 
+def remove_table_borders(table):
+    """Removes outer and inner borders from Word tables to match exact screenshot layout."""
+    tblPr = table._element.xpath('w:tblPr')
+    if tblPr:
+        borders = parse_xml(
+            f'<w:tblBorders {nsdecls("w")}>\n'
+            f'  <w:top w:val="none"/>\n'
+            f'  <w:left w:val="none"/>\n'
+            f'  <w:bottom w:val="none"/>\n'
+            f'  <w:right w:val="none"/>\n'
+            f'  <w:insideH w:val="none"/>\n'
+            f'  <w:insideV w:val="none"/>\n'
+            f'</w:tblBorders>'
+        )
+        tblPr[0].append(borders)
+
 def build_deped_ilaw_docx(header_data, content_dict):
+    """Clones the exact layout, font, sizes, and highlights from screenshot_25d570.jpg."""
     doc = docx.Document()
 
-    # Set page margins
+    # Set document margins
     for s in doc.sections:
         s.top_margin = Inches(0.8)
         s.bottom_margin = Inches(0.8)
         s.left_margin = Inches(0.8)
         s.right_margin = Inches(0.8)
 
-    # Title Banner
+    # Document Title Banner
     p_title = doc.add_paragraph()
     p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_title = p_title.add_run(f"ILAW LESSON PLAN ON {clean_math_syntax(header_data['subject']).upper()}\n")
+    run_title.font.name = "Cambria"
     run_title.bold = True
     run_title.font.size = Pt(16)
     run_title.font.color.rgb = RGBColor(15, 32, 67)
 
     run_sub = p_title.add_run("DepEd Order No. 003, s. 2026 (Annex A Template) | COT Indicators Embedded")
+    run_sub.font.name = "Cambria"
     run_sub.font.size = Pt(10)
     run_sub.font.italic = True
     run_sub.font.color.rgb = RGBColor(100, 100, 100)
@@ -234,6 +251,8 @@ def build_deped_ilaw_docx(header_data, content_dict):
     # Metadata Table
     meta_table = doc.add_table(rows=7, cols=2)
     meta_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    remove_table_borders(meta_table)
+
     meta_data = [
         ("Name of Lesson", clean_math_syntax(header_data["topic"])),
         ("Learning Area/s", clean_math_syntax(header_data["subject"])),
@@ -253,13 +272,17 @@ def build_deped_ilaw_docx(header_data, content_dict):
         set_cell_background(cell_lbl, "F2F4F8")
 
         p_lbl = cell_lbl.paragraphs[0]
+        p_lbl.paragraph_format.space_after = Pt(4)
         r_lbl = p_lbl.add_run(label)
+        r_lbl.font.name = "Cambria"
         r_lbl.bold = True
         r_lbl.font.size = Pt(10)
         r_lbl.font.color.rgb = RGBColor(0, 0, 0)
 
         p_val = cell_val.paragraphs[0]
+        p_val.paragraph_format.space_after = Pt(4)
         r_val = p_val.add_run(val)
+        r_val.font.name = "Cambria"
         r_val.font.size = Pt(10)
         r_val.font.color.rgb = RGBColor(0, 0, 0)
 
@@ -268,13 +291,17 @@ def build_deped_ilaw_docx(header_data, content_dict):
     # Section Table Generator
     def add_section_table(section_title, rows_data):
         h_p = doc.add_paragraph()
+        h_p.paragraph_format.space_before = Pt(8)
+        h_p.paragraph_format.space_after = Pt(4)
         h_run = h_p.add_run(section_title)
+        h_run.font.name = "Cambria"
         h_run.bold = True
         h_run.font.size = Pt(12)
         h_run.font.color.rgb = RGBColor(15, 32, 67)
 
         tbl = doc.add_table(rows=len(rows_data), cols=2)
         tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+        remove_table_borders(tbl)
 
         cot_regex = re.compile(r"((?:📌|📌|\*|\+)?\s*\[COT INDICATOR:[^\]]+\])", re.IGNORECASE)
 
@@ -287,18 +314,22 @@ def build_deped_ilaw_docx(header_data, content_dict):
             set_cell_background(c_lbl, "EBF3FC")
 
             p1 = c_lbl.paragraphs[0]
+            p1.paragraph_format.space_after = Pt(4)
             r1 = p1.add_run(lbl)
+            r1.font.name = "Cambria"
             r1.bold = True
             r1.font.size = Pt(10)
             r1.font.color.rgb = RGBColor(0, 0, 0)
 
             p2 = c_val.paragraphs[0]
+            p2.paragraph_format.space_after = Pt(4)
             clean_text = clean_math_syntax(text_content.strip())
 
             lines = clean_text.split("\n")
             for l_idx, line in enumerate(lines):
                 if l_idx > 0:
                     p2 = c_val.add_paragraph()
+                    p2.paragraph_format.space_after = Pt(4)
 
                 segments = cot_regex.split(line)
                 for seg in segments:
@@ -306,12 +337,14 @@ def build_deped_ilaw_docx(header_data, content_dict):
                         continue
                     if "[COT INDICATOR" in seg.upper():
                         r_cot = p2.add_run(f" {seg.strip()} ")
+                        r_cot.font.name = "Cambria"
                         r_cot.bold = True
                         r_cot.font.size = Pt(10)
                         r_cot.font.color.rgb = RGBColor(0, 0, 0)
                         r_cot.font.highlight_color = WD_COLOR_INDEX.YELLOW
                     else:
                         r_norm = p2.add_run(seg)
+                        r_norm.font.name = "Cambria"
                         r_norm.font.size = Pt(10)
                         r_norm.font.color.rgb = RGBColor(0, 0, 0)
                         r_norm.font.highlight_color = WD_COLOR_INDEX.AUTO
@@ -410,17 +443,14 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
 
                     CRITICAL MULTI-SESSION INSTRUCTION:
                     - Total Sessions Specified: {sessions}
-                    - If Total Sessions is greater than 1 (e.g., 2, 3, 4, etc.), you MUST explicitly break down the contents of 'Pre-Lesson', 'Instructional Flow', 'Collaborative Group Activity', 'Synthesis & Resources', and 'Formative Assessment' into Day 1 / Session 1, Day 2 / Session 2, up to Day {sessions} / Session {sessions}.
-                    - Ensure each session builds logically on the previous one to cover the complete learning competency across all {sessions} sessions.
+                    - You MUST explicitly structure 'Learning Objectives', 'Pre-Lesson', 'Instructional Flow', 'Collaborative Group Activity', 'Synthesis & Resources', and 'Formative Assessment' session-by-session as 'Session 1:', 'Session 2:', up to 'Session {sessions}:'.
 
                     CRITICAL AUTOMATIC LEARNER CONTEXT INSTRUCTION:
-                    - Automatically generate a detailed, realistic 'Learner Context' tailored specifically for Grade Level/Section: '{grade_level}', Subject: '{subject}', and Topic: '{topic}'.
-                    - Address diverse learner profiles (e.g., visual, auditory, kinesthetic, logical-mathematical thinkers) and state how differentiated instruction bridges achievement gaps in this specific subject.
+                    - Automatically generate a detailed, realistic 'Learner Context' tailored specifically for Grade Level/Section: '{grade_level}', Subject: '{subject}', and Topic: '{topic}'. Include a COT indicator at the end.
 
                     CRITICAL FORMATTING RULES:
-                    1. DO NOT use LaTeX syntax or dollar signs ($) for mathematical formulas, functions, or variables. Write math in clean plain text.
-                    2. IMPORTANT FOR COT INDICATORS: Place each indicator tag strictly at the VERY END of the paragraph/text block that demonstrates it. NEVER place it in the middle of sentences.
-                    3. Structure of COT Tag: Write explicitly as 📌 [COT INDICATOR: code: description] at the end of the text segment.
+                    1. DO NOT use LaTeX syntax or dollar signs ($) for mathematical formulas or variables. Write plain text.
+                    2. IMPORTANT FOR COT INDICATORS: Place each indicator tag strictly at the VERY END of the sentence/paragraph that demonstrates it. Write as 📌 [COT INDICATOR: code: description]
 
                     HEADER DETAILS:
                     - Teacher: {teacher_name} ({position_rank} - Stage: {stage_info['stage']})
@@ -438,16 +468,16 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                     STRUCTURE OUTPUT USING ':::' AS DELIMITER:
 
                     Learning Competency::: {learning_competency}
-                    Learning Objectives::: Provide SMART objectives covering all {sessions} session(s). Place COT indicator tags ONLY at the end of objectives. 📌 [COT INDICATOR: code: description]
-                    Learner Context::: Provide the automatically generated learner context for {grade_level} in {subject}. 📌 [COT INDICATOR: code: description]
-                    Pre-Lesson::: Write detailed warmup, review, and behavioral expectations for each of the {sessions} session(s) (e.g., Session 1:, Session 2:, etc.). 📌 [COT INDICATOR: code: description]
-                    Instructional Flow::: Write detailed step-by-step direct instruction and modeling for each of the {sessions} session(s). 📌 [COT INDICATOR: code: description]
-                    Collaborative Group Activity::: Write detailed differentiated group tasks for each of the {sessions} session(s). 📌 [COT INDICATOR: code: description]
-                    Synthesis & Resources::: Write debriefing questions and instructional materials for each of the {sessions} session(s). 📌 [COT INDICATOR: code: description]
-                    Opportunities for Integration::: Write cross-curricular integration details. 📌 [COT INDICATOR: code: description]
-                    Formative Assessment::: Write detailed evaluation activity for each session or cumulative assessment across {sessions} session(s). 📌 [COT INDICATOR: code: description]
+                    Learning Objectives::: Write Session 1:, Session 2:, etc., SMART objectives. End each with a COT indicator tag. 📌 [COT INDICATOR: code: description]
+                    Learner Context::: Provide the automatically generated learner context. 📌 [COT INDICATOR: code: description]
+                    Pre-Lesson::: Write detailed warmup/review for Session 1:, Session 2:, etc. 📌 [COT INDICATOR: code: description]
+                    Instructional Flow::: Write detailed instruction/modeling for Session 1:, Session 2:, etc. 📌 [COT INDICATOR: code: description]
+                    Collaborative Group Activity::: Write detailed group activities for Session 1:, Session 2:, etc. 📌 [COT INDICATOR: code: description]
+                    Synthesis & Resources::: Write debriefing questions for Session 1:, Session 2:, etc. 📌 [COT INDICATOR: code: description]
+                    Opportunities for Integration::: Write cross-curricular linkages. 📌 [COT INDICATOR: code: description]
+                    Formative Assessment::: Write evaluation tasks for Session 1:, Session 2:, etc. 📌 [COT INDICATOR: code: description]
                     Extended Learning Opportunities::: Write homework or remedial tasks here.
-                    Teacher Reflections::: Write reflective notes on student performance and strategy effectiveness.
+                    Teacher Reflections::: Write reflective notes on student performance.
                     """
 
                     response = None
