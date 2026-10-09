@@ -68,57 +68,70 @@ def validate_and_claim_license(license_key, email_input):
 
 
 # ==============================================================================
-# 2. COT DATA STRUCTURES & CAREER STAGE MAPPING
+# 2. COT DATA STRUCTURES & RANK MAPPING (FROM COT INDICATORS 2026-2027.docx)
 # ==============================================================================
 
 CAREER_STAGES = {
-    "Teacher I": {"stage": "Beginning to Proficient", "scale": "2 to 6"},
-    "Teacher II": {"stage": "Beginning to Proficient", "scale": "2 to 6"},
-    "Teacher III": {"stage": "Beginning to Proficient", "scale": "2 to 6"},
-    "Teacher IV": {"stage": "Proficient", "scale": "3 to 7"},
-    "Teacher V": {"stage": "Proficient", "scale": "3 to 7"},
-    "Teacher VI": {"stage": "Proficient", "scale": "3 to 7"},
-    "Teacher VII": {"stage": "Proficient", "scale": "3 to 7"},
-    "Master Teacher I": {"stage": "Highly Proficient", "scale": "4 to 8"},
-    "Master Teacher II": {"stage": "Highly Proficient", "scale": "4 to 8"},
-    "Master Teacher III": {"stage": "Distinguished", "scale": "5 to 9"},
-    "Master Teacher IV": {"stage": "Distinguished", "scale": "5 to 9"},
-    "Master Teacher V": {"stage": "Distinguished", "scale": "5 to 9"},
-}
-
-COT_INDICATORS_BY_SY = {
-    "2025-2026": [
-        ("1.1.2", "Apply knowledge of content within and across curriculum teaching areas"),
-        ("1.4.2", "Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills"),
-        ("1.5.2", "Apply a range of teaching strategies to develop critical and creative thinking, as well as other higher-order thinking skills"),
-        ("2.3.2", "Manage classroom structure to engage learners, individually or in groups, in meaningful exploration, discovery and hands-on activities within a range of physical learning environments"),
-        ("2.6.2", "Manage learner behavior constructively by applying positive and non-violent discipline to ensure learning-focused environments"),
-        ("3.1.2", "Use differentiated, developmentally appropriate learning experiences to address learners' gender, needs, strengths, interests and experiences"),
-        ("4.1.2", "Plan, manage and implement developmentally sequenced teaching and learning process to meet curriculum requirements and varied teaching contexts"),
-        ("4.5.2", "Select, develop, organize and use appropriate teaching and learning resources, including ICT, to address learning goals"),
-        ("5.1.2", "Design, select, organize and use diagnostic, formative and summative assessment strategies consistent with curriculum requirements"),
-    ],
-    "2026-2027": [
-        ("1.1.2", "Apply knowledge of content within and across curriculum teaching areas"),
-        ("1.4.2", "Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills"),
-        ("1.5.2", "Apply a range of teaching strategies to develop critical and creative thinking, as well as other higher-order thinking skills"),
-        ("1.6.2", "Display proficient use of Mother Tongue, Filipino and English to facilitate teaching and learning"),
-        ("2.1.2", "Establish safe and secure learning environments to enhance learning through the consistent implementation of policies, guidelines and procedures"),
-        ("2.2.2", "Maintain learning environments that promote fairness, respect and care to encourage learning"),
-        ("3.2.2", "Establish a learner-centered culture by using teaching strategies that respond to learners' linguistic, cultural, socio-economic and religious backgrounds"),
-        ("3.5.2", "Adapt and use culturally appropriate teaching strategies to address the needs of learners from indigenous groups"),
-        ("5.3.2", "Use strategies for providing timely, accurate and constructive feedback to improve learner performance"),
-    ],
-    "2027-2028": [
-        ("1.1.2", "Apply knowledge of content within and across curriculum teaching areas"),
-        ("1.4.2", "Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills"),
-        ("1.3.2", "Ensure the positive use of ICT to facilitate the teaching and learning process"),
-        ("1.7.2", "Use effective verbal and non-verbal classroom communication strategies to support learner understanding, participation, engagement and achievement"),
-        ("2.4.2", "Maintain supportive learning environments that nurture and inspire learners to participate, cooperate and collaborate in continued learning"),
-        ("2.5.2", "Apply a range of successful strategies that maintain learning environments that motivate learners to work productively by assuming responsibility for their own learning"),
-        ("3.3.2", "Design, adapt and implement teaching strategies that are responsive to learners with disabilities, giftedness and talents"),
-        ("3.4.2", "Plan and deliver teaching strategies that are responsive to the special educational needs of learners in difficult circumstances"),
-    ],
+    "Teacher I-III": {
+        "stage": "Proficient Teacher A",
+        "scale": "2 to 6",
+        "indicators": [
+            ("1.1.2", "Apply knowledge of content within and across curriculum teaching areas"),
+            ("1.4.2", "Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills"),
+            ("1.5.2", "Apply a range of teaching strategies to develop critical and creative thinking, as well as other higher-order thinking skills"),
+            ("1.6.2", "Display proficient use of Mother Tongue, Filipino and English to facilitate teaching and learning"),
+            ("2.1.2", "Establish safe and secure learning environments to enhance learning through the consistent implementation of policies, guidelines and procedures"),
+            ("2.2.2", "Maintain learning environments that promote fairness, respect and care to encourage learning"),
+            ("3.2.2", "Establish a learner-centered culture by using teaching strategies that respond to learners' linguistic, cultural, socio-economic and religious backgrounds"),
+            ("3.5.2", "Adapt and use culturally appropriate teaching strategies to address the needs of learners from indigenous groups"),
+            ("5.3.2", "Use strategies for providing timely, accurate and constructive feedback to improve learner performance"),
+        ]
+    },
+    "Teacher IV-VII": {
+        "stage": "Proficient Teacher B",
+        "scale": "3 to 7",
+        "indicators": [
+            ("1.1.2", "Apply knowledge of content within and across curriculum teaching areas"),
+            ("1.4.2", "Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills"),
+            ("1.5.2", "Apply a range of teaching strategies to develop critical and creative thinking, as well as other higher-order thinking skills"),
+            ("1.6.2", "Display proficient use of Mother Tongue, Filipino and English to facilitate teaching and learning"),
+            ("2.1.2", "Establish safe and secure learning environments to enhance learning through the consistent implementation of policies, guidelines and procedures"),
+            ("2.2.2", "Maintain learning environments that promote fairness, respect and care to encourage learning"),
+            ("3.2.2", "Establish a learner-centered culture by using teaching strategies that respond to learners' linguistic, cultural, socio-economic and religious backgrounds"),
+            ("3.5.2", "Adapt and use culturally appropriate teaching strategies to address the needs of learners from indigenous groups"),
+            ("5.3.2", "Use strategies for providing timely, accurate and constructive feedback to improve learner performance"),
+        ]
+    },
+    "Master Teacher I-II": {
+        "stage": "Highly Proficient Teacher",
+        "scale": "4 to 8",
+        "indicators": [
+            ("1.1.2", "Apply knowledge of content within and across curriculum teaching areas"),
+            ("1.4.2", "Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills"),
+            ("1.5.2", "Apply a range of teaching strategies to develop critical and creative thinking, as well as other higher-order thinking skills"),
+            ("1.6.2", "Display proficient use of Mother Tongue, Filipino and English to facilitate teaching and learning"),
+            ("2.1.2", "Establish safe and secure learning environments to enhance learning through the consistent implementation of policies, guidelines and procedures"),
+            ("2.2.2", "Maintain learning environments that promote fairness, respect and care to encourage learning"),
+            ("3.2.2", "Establish a learner-centered culture by using teaching strategies that respond to learners' linguistic, cultural, socio-economic and religious backgrounds"),
+            ("3.5.2", "Adapt and use culturally appropriate teaching strategies to address the needs of learners from indigenous groups"),
+            ("5.3.2", "Use strategies for providing timely, accurate and constructive feedback to improve learner performance"),
+        ]
+    },
+    "Master Teacher III-V": {
+        "stage": "Distinguished Teacher",
+        "scale": "5 to 9",
+        "indicators": [
+            ("1.1.2", "Apply knowledge of content within and across curriculum teaching areas"),
+            ("1.4.2", "Use a range of teaching strategies that enhance learner achievement in literacy and numeracy skills"),
+            ("1.5.2", "Apply a range of teaching strategies to develop critical and creative thinking, as well as other higher-order thinking skills"),
+            ("2.3.2", "Manage classroom structure to engage learners, individually or in groups, in meaningful exploration, discovery and hands-on activities within a range of physical learning environments"),
+            ("2.6.2", "Manage learner behavior constructively by applying positive and non-violent discipline to ensure learning-focused environments"),
+            ("3.1.2", "Use differentiated, developmentally appropriate learning experiences to address learners' gender, needs, strengths, interests and experiences"),
+            ("4.1.2", "Plan, manage and implement developmentally sequenced teaching and learning process to meet curriculum requirements and varied teaching contexts"),
+            ("4.5.2", "Select, develop, organize and use appropriate teaching and learning resources, including ICT, to address learning goals"),
+            ("5.1.2", "Design, select, organize and use diagnostic, formative and summative assessment strategies consistent with curriculum requirements"),
+        ]
+    },
 }
 
 # ==============================================================================
@@ -128,7 +141,7 @@ COT_INDICATORS_BY_SY = {
 st.set_page_config(page_title="Binonz ILAW Lesson Plan Generator", page_icon="📝", layout="wide")
 
 st.title("💡 Binonz ILAW Lesson Plan Generator")
-st.caption("DepEd Order No. 003, s. 2026 (Annex A Template) | Automated COT Indicator Embedding")
+st.caption("DepEd Order No. 003, s. 2026 (Annex A Template) | Automated Rank-Based COT Indicator Embedding")
 
 # SIDEBAR: CREDENTIALS & TEACHER PROFILE
 with st.sidebar:
@@ -140,7 +153,7 @@ with st.sidebar:
     st.divider()
     st.header("👤 Teacher Profile & Position")
     teacher_name = st.text_input("Teacher Name", "JUAN DELA CRUZ")
-    position_rank = st.selectbox("Position / Rank", list(CAREER_STAGES.keys()), index=2)
+    position_rank = st.selectbox("Position / Rank", list(CAREER_STAGES.keys()), index=0)
 
     stage_info = CAREER_STAGES[position_rank]
     st.info(f"**Career Stage:** {stage_info['stage']}\n\n**COT Scale:** {stage_info['scale']}")
@@ -154,7 +167,7 @@ with col1:
     subject = st.text_input("Learning Area", "Araling Panlipunan")
 
 with col2:
-    school_year = st.text_input("School Year", "2025-2026")
+    school_year = st.text_input("School Year", "2026-2027")
     sessions = st.text_input("No. of Sessions", "1")
 
 with col3:
@@ -162,15 +175,13 @@ with col3:
     references = st.text_input("References", "DepEd Curriculum Guide & Presentation Slides")
 
 st.divider()
-st.subheader("2. Select COT Indicators to Integrate")
+st.subheader(f"2. Select COT Indicators to Integrate ({position_rank})")
 
-available_indicators = COT_INDICATORS_BY_SY.get(
-    school_year.strip(), COT_INDICATORS_BY_SY["2025-2026"]
-)
+available_indicators = stage_info["indicators"]
 selected_indicators = []
 
 for code, desc in available_indicators:
-    if st.checkbox(f"**[{code}]** {desc}", value=True):
+    if st.checkbox(f"**[{code}]** {desc}", value=True, key=f"cot_{position_rank}_{code}"):
         selected_indicators.append(f"COT INDICATOR {code}: {desc}")
 
 st.divider()
@@ -243,7 +254,6 @@ def build_deped_ilaw_docx(header_data, content_dict):
         s.page_width = Inches(8.5)
         s.page_height = Inches(13.0)
         
-        # Compact 0.5-inch margins for 1 session to strictly fit within 2 pages
         if is_single_session:
             s.top_margin = Inches(0.5)
             s.bottom_margin = Inches(0.5)
@@ -506,7 +516,7 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                     INPUTS:
                     - Learning Competency: {learning_competency}
 
-                    TARGET COT INDICATORS TO EMBED:
+                    TARGET RANK-SPECIFIC COT INDICATORS TO EMBED:
                     {cot_prompt_text if cot_prompt_text else "Apply standard pedagogical strategies."}
 
                     STRUCTURE OUTPUT USING ':::' AS DELIMITER:
