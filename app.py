@@ -38,12 +38,11 @@ db = init_firebase()
 def validate_and_claim_license(license_key, email_input):
     """
     Validates license key in Firestore.
-    Fixes the 'even number of path elements' error by checking for empty inputs FIRST.
+    Checks for empty inputs FIRST to prevent path errors.
     """
     key = license_key.strip() if license_key else ""
     email = email_input.strip() if email_input else ""
 
-    # Prevent empty path queries in Firestore
     if not key:
         return False, "Please enter a valid License Key."
     if not email:
@@ -154,7 +153,7 @@ st.subheader("1. Lesson Details")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    grade_level = st.text_input("Grade Level & Section", "Grade 9 - Newton")
+    grade_level = st.text_input("Grade Level & Section", "Grade 9 - Kindness")
     subject = st.text_input("Learning Area", "Mathematics")
 
 with col2:
@@ -178,14 +177,10 @@ for code, desc in available_indicators:
         selected_indicators.append(f"COT INDICATOR {code}: {desc}")
 
 st.divider()
-st.subheader("3. Learning Objectives & Context")
+st.subheader("3. Learning Objectives")
 learning_competency = st.text_area(
     "Learning Competency",
     "Graphs a linear function and values its real-life applications (domain, range, intercepts, and slope).",
-)
-learner_context = st.text_area(
-    "Learner Context",
-    "The class is a mixed-ability group of learners with varied mathematical inclinations. Visual and kinesthetic learners benefit from coordinate plotting exercises.",
 )
 
 # ==============================================================================
@@ -214,12 +209,14 @@ def set_cell_background(cell, hex_color):
 def build_deped_ilaw_docx(header_data, content_dict):
     doc = docx.Document()
 
+    # Set page margins
     for s in doc.sections:
         s.top_margin = Inches(0.8)
         s.bottom_margin = Inches(0.8)
         s.left_margin = Inches(0.8)
         s.right_margin = Inches(0.8)
 
+    # Title Banner
     p_title = doc.add_paragraph()
     p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_title = p_title.add_run(f"ILAW LESSON PLAN ON {clean_math_syntax(header_data['subject']).upper()}\n")
@@ -234,7 +231,8 @@ def build_deped_ilaw_docx(header_data, content_dict):
 
     doc.add_paragraph()
 
-    meta_table = doc.add_table(rows=6, cols=2)
+    # Metadata Table
+    meta_table = doc.add_table(rows=7, cols=2)
     meta_table.alignment = WD_TABLE_ALIGNMENT.CENTER
     meta_data = [
         ("Name of Lesson", clean_math_syntax(header_data["topic"])),
@@ -243,6 +241,7 @@ def build_deped_ilaw_docx(header_data, content_dict):
         ("Grade Level & Section", clean_math_syntax(header_data["grade"])),
         ("No. of Sessions", clean_math_syntax(header_data["sessions"])),
         ("References", clean_math_syntax(header_data["references"])),
+        ("Declaration of AI Use", "AI was utilized to structure content into DepEd Order No. 003, s. 2026 Annex A template & align COT indicators."),
     ]
 
     for idx, (label, val) in enumerate(meta_data):
@@ -266,6 +265,7 @@ def build_deped_ilaw_docx(header_data, content_dict):
 
     doc.add_paragraph()
 
+    # Section Table Generator
     def add_section_table(section_title, rows_data):
         h_p = doc.add_paragraph()
         h_run = h_p.add_run(section_title)
@@ -379,22 +379,20 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
             st.error(msg)
         else:
             st.success(msg)
-            with st.spinner("Generating DepEd Order No. 003, s. 2026 (Annex A) ILAW Lesson Plan..."):
+            with st.spinner(f"Generating DepEd Order No. 003, s. 2026 (Annex A) ILAW Lesson Plan for {sessions} session(s)..."):
                 try:
                     genai.configure(api_key=api_key.strip())
 
-                    # DYNAMIC MODEL SELECTION: Queries available models supported by the provided API key
+                    # Dynamic model selection
                     available_models = []
                     try:
                         for m in genai.list_models():
                             if 'generateContent' in m.supported_generation_methods:
-                                # Clean model name prefix if present
                                 model_name = m.name.replace("models/", "")
                                 available_models.append(model_name)
                     except Exception:
                         pass
 
-                    # Fallback list if listing models fails
                     fallback_models = [
                         "gemini-1.5-flash",
                         "gemini-1.5-flash-latest",
@@ -404,29 +402,35 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                         "gemini-2.5-flash"
                     ]
 
-                    # Prioritize dynamically discovered models, then fallbacks
                     model_candidates = list(dict.fromkeys(available_models + fallback_models))
-
                     cot_prompt_text = "\n".join([f"- {ind}" for ind in selected_indicators])
 
                     prompt = f"""
                     You are an expert DepEd Instructional Designer. Create an official DepEd ILAW Lesson Plan adhering strictly to DepEd Order No. 003, s. 2026 (Annex A Template).
 
-                    CRITICAL PLACEMENT & FORMATTING RULES:
+                    CRITICAL MULTI-SESSION INSTRUCTION:
+                    - Total Sessions Specified: {sessions}
+                    - If Total Sessions is greater than 1 (e.g., 2, 3, 4, etc.), you MUST explicitly break down the contents of 'Pre-Lesson', 'Instructional Flow', 'Collaborative Group Activity', 'Synthesis & Resources', and 'Formative Assessment' into Day 1 / Session 1, Day 2 / Session 2, up to Day {sessions} / Session {sessions}.
+                    - Ensure each session builds logically on the previous one to cover the complete learning competency across all {sessions} sessions.
+
+                    CRITICAL AUTOMATIC LEARNER CONTEXT INSTRUCTION:
+                    - Automatically generate a detailed, realistic 'Learner Context' tailored specifically for Grade Level/Section: '{grade_level}', Subject: '{subject}', and Topic: '{topic}'.
+                    - Address diverse learner profiles (e.g., visual, auditory, kinesthetic, logical-mathematical thinkers) and state how differentiated instruction bridges achievement gaps in this specific subject.
+
+                    CRITICAL FORMATTING RULES:
                     1. DO NOT use LaTeX syntax or dollar signs ($) for mathematical formulas, functions, or variables. Write math in clean plain text.
-                    2. IMPORTANT FOR COT INDICATORS: Place each indicator tag strictly at the VERY END of the paragraph/text block that demonstrates it. NEVER place it in the middle of sentences or before descriptive text.
+                    2. IMPORTANT FOR COT INDICATORS: Place each indicator tag strictly at the VERY END of the paragraph/text block that demonstrates it. NEVER place it in the middle of sentences.
                     3. Structure of COT Tag: Write explicitly as 📌 [COT INDICATOR: code: description] at the end of the text segment.
 
                     HEADER DETAILS:
                     - Teacher: {teacher_name} ({position_rank} - Stage: {stage_info['stage']})
                     - Grade & Section: {grade_level} | Learning Area: {subject}
-                    - School Year: {school_year} | Sessions: {sessions}
+                    - School Year: {school_year} | No. of Sessions: {sessions}
                     - Lesson Name/Topic: {topic}
                     - References: {references}
 
                     INPUTS:
                     - Learning Competency: {learning_competency}
-                    - Learner Context: {learner_context}
 
                     TARGET COT INDICATORS TO EMBED:
                     {cot_prompt_text if cot_prompt_text else "Apply standard pedagogical strategies."}
@@ -434,14 +438,14 @@ if st.button("🚀 Generate Lesson Plan", type="primary", use_container_width=Tr
                     STRUCTURE OUTPUT USING ':::' AS DELIMITER:
 
                     Learning Competency::: {learning_competency}
-                    Learning Objectives::: Provide 3 SMART objectives. Place COT indicator tags ONLY at the end of each objective. 📌 [COT INDICATOR: code: description]
-                    Learner Context::: Describe class context thoroughly. Place COT indicator tag ONLY at the end of the text. 📌 [COT INDICATOR: code: description]
-                    Pre-Lesson::: Write detailed warmup, review, and behavioral expectations. Place COT indicator tag ONLY at the end of the section. 📌 [COT INDICATOR: code: description]
-                    Instructional Flow::: Write detailed step-by-step direct instruction and ICT-assisted modeling. Place COT indicator tag ONLY at the end of the section. 📌 [COT INDICATOR: code: description]
-                    Collaborative Group Activity::: Write detailed differentiated group tasks across stations. Place COT indicator tag ONLY at the end of each station/activity description. 📌 [COT INDICATOR: code: description]
-                    Synthesis & Resources::: Write debriefing questions and instructional materials. Place COT indicator tag ONLY at the end. 📌 [COT INDICATOR: code: description]
-                    Opportunities for Integration::: Write cross-curricular integration details. Place COT indicator tag ONLY at the end. 📌 [COT INDICATOR: code: description]
-                    Formative Assessment::: Write detailed evaluation activity. Place COT indicator tag ONLY at the end. 📌 [COT INDICATOR: code: description]
+                    Learning Objectives::: Provide SMART objectives covering all {sessions} session(s). Place COT indicator tags ONLY at the end of objectives. 📌 [COT INDICATOR: code: description]
+                    Learner Context::: Provide the automatically generated learner context for {grade_level} in {subject}. 📌 [COT INDICATOR: code: description]
+                    Pre-Lesson::: Write detailed warmup, review, and behavioral expectations for each of the {sessions} session(s) (e.g., Session 1:, Session 2:, etc.). 📌 [COT INDICATOR: code: description]
+                    Instructional Flow::: Write detailed step-by-step direct instruction and modeling for each of the {sessions} session(s). 📌 [COT INDICATOR: code: description]
+                    Collaborative Group Activity::: Write detailed differentiated group tasks for each of the {sessions} session(s). 📌 [COT INDICATOR: code: description]
+                    Synthesis & Resources::: Write debriefing questions and instructional materials for each of the {sessions} session(s). 📌 [COT INDICATOR: code: description]
+                    Opportunities for Integration::: Write cross-curricular integration details. 📌 [COT INDICATOR: code: description]
+                    Formative Assessment::: Write detailed evaluation activity for each session or cumulative assessment across {sessions} session(s). 📌 [COT INDICATOR: code: description]
                     Extended Learning Opportunities::: Write homework or remedial tasks here.
                     Teacher Reflections::: Write reflective notes on student performance and strategy effectiveness.
                     """
